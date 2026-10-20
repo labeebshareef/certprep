@@ -1,0 +1,59 @@
+{
+  "courseId": "dva-c03",
+  "generatedAt": "2026-10-20T13:10:04.499Z",
+  "totalQuestions": 85,
+  "perDomain": {
+    "d1": 33,
+    "d2": 20,
+    "d3": 21,
+    "d4": 11
+  },
+  "files": {
+    "course.json": {
+      "hash": "sha256:6208ac54856e3ceb168c57684d34bf2230b0d0d74b1b7e03b3a1c0d3ae442c8e"
+    },
+    "glossary.json": {
+      "hash": "sha256:eb04edac0d8bb7c1b46ce9c8a6d419120c4b791e19bf282cad49759ebe0a5faa"
+    },
+    "topics/d1-lambda.json": {
+      "hash": "sha256:dc16eafdce715457b6336a14198344bd434bc8bd254e3da6e35e101207786352",
+      "questions": 11,
+      "sectionId": "lambda"
+    },
+    "topics/d1-dynamodb.json": {
+      "hash": "sha256:d7a79681235e5f484d8b6eb1750de6dbd5e87e910ef75c52137b50156fa209a9",
+      "questions": 11,
+      "sectionId": "dynamodb"
+    },
+    "topics/d1-messaging.json": {
+      "hash": "sha256:dde2a0ae00598ab1bef01bb46a5c9b51ac84e55535f0b8f74270e1508024fbef",
+      "questions": 11,
+      "sectionId": "messaging"
+    },
+    "topics/d2-iam-cognito.json": {
+      "hash": "sha256:50f0a329b53245b5ac1f3c2e038550847d710419c9901f9d2a884632e921b0e3",
+      "questions": 10,
+      "sectionId": "iam-cognito"
+    },
+    "topics/d2-encryption-secrets.json": {
+      "hash": "sha256:cdf08e13e5e3edc83fcfc4c4ff0f5c196c7049ccd04a0a626f4158e747f52e1a",
+      "questions": 10,
+      "sectionId": "encryption-secrets"
+    },
+    "topics/d3-cicd.json": {
+      "hash": "sha256:1bacff5bcc556bc483605253e5c9c5235760652b17fcba9c49c54a3b179a340f",
+      "questions": 10,
+      "sectionId": "cicd"
+    },
+    "topics/d3-iac-apigw-containers.json": {
+      "hash": "sha256:87d5a2c4a764114537be624050b81c82ca04816f78d90dbf59c162136094dde2",
+      "questions": 11,
+      "sectionId": "iac-apigw-containers"
+    },
+    "topics/d4-observability.json": {
+      "hash": "sha256:6487e9d5d39e19304b6dca3db46f046373ced3d44b2641f42b02143fcb841167",
+      "questions": 11,
+      "sectionId": "observability"
+    }
+  }
+}

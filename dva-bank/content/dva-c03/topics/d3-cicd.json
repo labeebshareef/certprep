@@ -1,0 +1,705 @@
+{
+  "schemaVersion": 1,
+  "courseId": "dva-c03",
+  "sectionId": "cicd",
+  "title": "CI/CD with CodePipeline, CodeBuild and CodeDeploy",
+  "questions": [
+    {
+      "id": "dva-c03/cicd/0001",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d3",
+      "taskId": "3.1",
+      "services": [
+        "codebuild",
+        "secrets-manager",
+        "parameter-store"
+      ],
+      "tags": [
+        "buildspec",
+        "secrets",
+        "least-ops-overhead"
+      ],
+      "stem": "A developer maintains an {{t:AWS CodeBuild}} project that publishes a Node.js library to a third-party private npm registry in the {{code:post_build}} phase of {{code:buildspec.yml}}. The registry token is currently hard-coded under {{code:env.variables}} in the buildspec, which is committed to the team's GitHub repository, and a security review has flagged it. The developer must remove the token from source control and keep it out of any plaintext build configuration. Which approach meets these requirements with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Delete the token from the buildspec and define it as a project-level environment variable of type {{code:PLAINTEXT}} in the {{t:CodeBuild}} console.",
+          "correct": false,
+          "explanation": "This removes the token from the repository, but a {{code:PLAINTEXT}} project variable is still stored and displayed in clear text in the console and in {{code:BatchGetProjects}} API responses, which is exactly what AWS warns against for sensitive values."
+        },
+        {
+          "id": "b",
+          "text": "Store the token in {{t:AWS Secrets Manager}}, reference it under {{code:env.secrets-manager}} in the buildspec, and allow the project's service role to call {{code:secretsmanager:GetSecretValue}} on that secret.",
+          "correct": true,
+          "explanation": "The {{code:env.secrets-manager}} mapping makes {{t:CodeBuild}} fetch the secret when the build starts and expose it to the build commands as an environment variable. Nothing sensitive is written to the buildspec or the project definition, and rotation happens in {{t:Secrets Manager}} without touching the pipeline."
+        },
+        {
+          "id": "c",
+          "text": "Store the token as a {{code:SecureString}} in {{t:AWS Systems Manager Parameter Store}} and, in the {{code:pre_build}} phase, run {{code:aws ssm get-parameter --with-decryption}} and export the returned value into a shell variable for the later phases.",
+          "correct": false,
+          "explanation": "This keeps the token out of plaintext configuration and would work, but it adds CLI calls and shell plumbing that the developer must write and maintain. {{t:CodeBuild}} does the same thing declaratively through the {{code:env.parameter-store}} mapping, so under the overhead qualifier this loses."
+        },
+        {
+          "id": "d",
+          "text": "Base64-encode the token and keep it under {{code:env.variables}} so that it is no longer readable in the repository.",
+          "correct": false,
+          "explanation": "Base64 is an encoding, not encryption; anyone with repository access can decode the value instantly, so the token is still effectively stored in plaintext in source control."
+        }
+      ],
+      "explanation": "{{t:CodeBuild}} has two declarative buildspec mappings for sensitive values: {{code:env.parameter-store}} for {{t:Parameter Store}} parameters (including {{code:SecureString}}) and {{code:env.secrets-manager}} for {{t:Secrets Manager}} secrets (optionally with a JSON key and version). Both are resolved by the project's service role at build start and never appear in the buildspec or the project. {{code:env.variables}} and project variables of type {{code:PLAINTEXT}} are visible in clear text through the console and API, so they are for non-sensitive settings only.",
+      "references": [
+        {
+          "title": "Buildspec reference – env.secrets-manager and env.parameter-store",
+          "url": "https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html"
+        },
+        {
+          "title": "Environment variables in build environments",
+          "url": "https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-env-vars.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:8878819195ad46879161ff9ad775b19b36a95dc59e8989af7eaa90ae5156a237"
+    },
+    {
+      "id": "dva-c03/cicd/0002",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 2,
+      "domainId": "d3",
+      "taskId": "3.3",
+      "services": [
+        "codebuild",
+        "s3"
+      ],
+      "tags": [
+        "buildspec",
+        "caching",
+        "test-reports",
+        "most-efficient"
+      ],
+      "stem": "A developer's {{t:AWS CodeBuild}} project builds a Node.js service from a GitHub repository connected through {{t:AWS CodeConnections}}. Each build takes about 8 minutes, and the phase details show that most of that time is spent in {{code:npm ci}} downloading dependencies that rarely change. The team also wants to see per-test pass/fail results and trends for its Jest unit tests directly in the {{t:CodeBuild}} console instead of scrolling through build logs. Which combination of changes will meet these requirements MOST efficiently? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Change the project's compute type to {{code:BUILD_GENERAL1_LARGE}} so that {{code:npm ci}} finishes faster.",
+          "correct": false,
+          "explanation": "Dependency installation here is bound by downloading packages over the network, not by CPU or memory, so a larger and more expensive compute type barely changes the time and does nothing for test reporting."
+        },
+        {
+          "id": "b",
+          "text": "Add a {{code:cache}} section to {{code:buildspec.yml}} whose {{code:paths}} include the npm download cache ({{code:/root/.npm/**/*}}) and configure the project to use an {{t:Amazon S3}} cache.",
+          "correct": true,
+          "explanation": "{{t:CodeBuild}} uploads the listed paths to the cache bucket at the end of a build and restores them at the start of the next, so {{code:npm ci}} installs from the local npm cache instead of downloading every package. Caching the npm cache directory (not {{code:node_modules}}) matters because {{code:npm ci}} deletes {{code:node_modules}} before installing. S3 caching persists across build hosts; {{code:LOCAL_CUSTOM_CACHE}} is faster but only available when the same host is reused."
+        },
+        {
+          "id": "c",
+          "text": "Proxy the public npm registry through an {{t:AWS CodeArtifact}} repository with an upstream connection to npmjs and point {{code:npm}} at it in the {{code:pre_build}} phase.",
+          "correct": false,
+          "explanation": "{{t:CodeArtifact}} gives you a private, IAM-authenticated package repository that can fetch and retain packages from a public upstream, which is valuable for private packages and supply-chain control, but every build still downloads the full dependency tree into a fresh container, so the build time barely changes."
+        },
+        {
+          "id": "d",
+          "text": "Configure Jest to write a JUnit XML file and add a {{code:reports}} section to {{code:buildspec.yml}} with {{code:file-format}} set to {{code:JUNITXML}} that points at that file.",
+          "correct": true,
+          "explanation": "A {{code:reports}} section tells {{t:CodeBuild}} to ingest test result files into a report group after the build. The console then shows each test case's status and duration plus pass-rate trends across builds, with no extra tooling to run or host."
+        },
+        {
+          "id": "e",
+          "text": "Enable the {{code:LOCAL_DOCKER_LAYER_CACHE}} mode in the project's cache settings.",
+          "correct": false,
+          "explanation": "Docker layer caching only speeds up {{code:docker build}} steps by reusing image layers on the same build host; it does not cache npm packages, so {{code:npm ci}} would still download everything."
+        },
+        {
+          "id": "f",
+          "text": "In the {{code:post_build}} phase, copy Jest's console output to {{t:Amazon S3}} and query it with {{t:Amazon Athena}} whenever a trend is needed.",
+          "correct": false,
+          "explanation": "This produces raw logs in S3 that someone must parse and query by hand; it does not give per-test results or trends in the {{t:CodeBuild}} console and adds storage and query setup the team must maintain."
+        }
+      ],
+      "explanation": "Two buildspec sections solve two different problems: {{code:cache}} plus a project cache (S3 for persistence across hosts, {{code:LOCAL_CUSTOM_CACHE}} for speed on a reused host) avoids re-downloading dependencies, and {{code:reports}} turns JUnit, Cucumber, NUnit, TestNG or Visual Studio TRX output into report groups with per-test results and trends. Remember that {{code:npm ci}} deletes {{code:node_modules}} before installing, so cache the npm download directory, not {{code:node_modules}}. Bigger compute types and Docker layer caching do not address network-bound package downloads.",
+      "references": [
+        {
+          "title": "Build caching in AWS CodeBuild",
+          "url": "https://docs.aws.amazon.com/codebuild/latest/userguide/build-caching.html"
+        },
+        {
+          "title": "Working with test reporting in AWS CodeBuild",
+          "url": "https://docs.aws.amazon.com/codebuild/latest/userguide/test-reporting.html"
+        },
+        {
+          "title": "What is AWS CodeArtifact?",
+          "url": "https://docs.aws.amazon.com/codeartifact/latest/ug/welcome.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:b6cfbbdb4d06d0e0ae8fbf959b4a378ea1377e873697e9002bbd572711ff79b9"
+    },
+    {
+      "id": "dva-c03/cicd/0003",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d3",
+      "taskId": "3.1",
+      "services": [
+        "codebuild"
+      ],
+      "tags": [
+        "buildspec",
+        "troubleshooting",
+        "fewest-changes"
+      ],
+      "stem": "A developer creates an {{t:AWS CodeBuild}} project for a repository that keeps its build definition at {{code:ci/buildspec.yml}} rather than in the repository root. The first build fails before any build commands run; the build details show that the {{code:DOWNLOAD_SOURCE}} phase failed with the status code {{code:YAML_FILE_ERROR}} and a message saying that the YAML file does not exist. The developer wants the next build to succeed with the FEWEST changes. What should the developer do?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Run the build on a workstation with the {{t:CodeBuild}} agent by using {{code:codebuild_build.sh}} with the {{code:-b ci/buildspec.yml}} option, then start the {{t:CodeBuild}} build again.",
+          "correct": false,
+          "explanation": "The local agent reproduces a build on your own machine with the same curated image, which is a good way to debug a buildspec without paying for failed cloud builds, but it changes nothing in the project's configuration, so the next {{t:CodeBuild}} build fails in exactly the same way."
+        },
+        {
+          "id": "b",
+          "text": "Set the project's buildspec setting (the {{code:buildspec}} property of the project source) to {{code:ci/buildspec.yml}}.",
+          "correct": true,
+          "explanation": "By default {{t:CodeBuild}} looks only for a file named {{code:buildspec.yml}} in the root of the downloaded source. The buildspec override accepts an alternate path relative to {{code:CODEBUILD_SRC_DIR}}, an S3 object, or inline YAML, so one project setting fixes the error with no repository change."
+        },
+        {
+          "id": "c",
+          "text": "Rename the file to {{code:ci/buildspec.yaml}} so that {{t:CodeBuild}} recognises the extension, and push the change.",
+          "correct": false,
+          "explanation": "The problem is the location, not the extension. {{t:CodeBuild}} still looks in the source root, so a renamed file inside {{code:ci/}} is equally invisible to it."
+        },
+        {
+          "id": "d",
+          "text": "Start the build with {{code:--debug-session-enabled}} and add a {{code:codebuild-breakpoint}} command so that the developer can inspect the build container with {{t:AWS Systems Manager Session Manager}}.",
+          "correct": false,
+          "explanation": "A debug session pauses a running build at the breakpoint so you can open a shell in the container, which is useful for failures inside build commands; here the buildspec was never found, so no phase that could contain a breakpoint ever runs."
+        }
+      ],
+      "explanation": "{{t:CodeBuild}} reads {{code:buildspec.yml}} from the root of the source by default; a buildspec elsewhere in the repository, in S3, or defined inline must be named in the project's buildspec override. A {{code:YAML_FILE_ERROR}} in the {{code:DOWNLOAD_SOURCE}} phase means the buildspec was not found, could not be parsed, or failed validation (for example a standard image with no {{code:runtime-versions}} section), and the phase details plus the {{t:Amazon CloudWatch Logs}} stream under {{code:/aws/codebuild/<project>}} are the first places to look for any failed build. The local agent and Session Manager debug sessions are debugging aids, not configuration fixes.",
+      "references": [
+        {
+          "title": "Buildspec file name and storage location",
+          "url": "https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html"
+        },
+        {
+          "title": "Run builds locally with the AWS CodeBuild agent",
+          "url": "https://docs.aws.amazon.com/codebuild/latest/userguide/use-codebuild-agent.html"
+        },
+        {
+          "title": "Debug builds with Session Manager",
+          "url": "https://docs.aws.amazon.com/codebuild/latest/userguide/session-manager.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:17f8a6eb5428a0ef16cff69ce86debd60d1b5e6ecc44bd0ea44e2077c01d22b3"
+    },
+    {
+      "id": "dva-c03/cicd/0004",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d3",
+      "taskId": "3.4",
+      "services": [
+        "codedeploy"
+      ],
+      "tags": [
+        "appspec",
+        "lifecycle-hooks",
+        "ec2",
+        "in-place"
+      ],
+      "stem": "A developer is configuring {{t:AWS CodeDeploy}} to perform in-place deployments of a Node.js API to an Auto Scaling group of EC2 instances that run the {{t:CodeDeploy}} agent. On each instance the deployment must stop the running Node process before the new revision's files are copied, run {{code:npm install --production}} after the files are in place, start the process, and then request {{code:/health}} and fail the deployment on that instance if the response is not HTTP 200. Which {{code:appspec.yml}} hook configuration meets these requirements?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "{{code:BeforeInstall}}: stop the process and run {{code:npm install --production}}; {{code:ApplicationStart}}: start the process, wait 10 seconds, request {{code:/health}} and exit non-zero unless the status is 200.",
+          "correct": false,
+          "explanation": "{{code:BeforeInstall}} runs before the {{code:Install}} event copies the revision's files, so {{code:npm install}} would run against the old or missing {{code:package.json}}. Folding the health check into {{code:ApplicationStart}} also relies on an arbitrary sleep; {{code:ValidateService}} is the event designed for that check."
+        },
+        {
+          "id": "b",
+          "text": "{{code:ApplicationStop}}: stop the process; {{code:Install}}: run {{code:npm install --production}}; {{code:AfterAllowTraffic}}: start the process, request {{code:/health}} and exit non-zero unless the status is 200.",
+          "correct": false,
+          "explanation": "{{code:Install}} is reserved for the {{t:CodeDeploy}} agent to copy files and cannot run scripts. {{code:AfterAllowTraffic}} exists only when the deployment group has a load balancer configured, and it runs after the instance is already receiving traffic, which is too late to catch a failing health check."
+        },
+        {
+          "id": "c",
+          "text": "{{code:ApplicationStop}}: stop the process; {{code:BeforeInstall}}: run {{code:npm install --production}}; {{code:AfterInstall}}: start the process, request {{code:/health}} and exit non-zero unless the status is 200.",
+          "correct": false,
+          "explanation": "Dependencies would again be installed before the new files exist. {{code:AfterInstall}} is a reasonable place to install dependencies, but the agent runs {{code:ApplicationStart}} and {{code:ValidateService}} after it for exactly the start and validation steps, so this mapping both misorders the install and skips the designated events."
+        },
+        {
+          "id": "d",
+          "text": "{{code:ApplicationStop}}: stop the process; {{code:AfterInstall}}: run {{code:npm install --production}}; {{code:ApplicationStart}}: start the process; {{code:ValidateService}}: request {{code:/health}} and exit non-zero unless the status is 200.",
+          "correct": true,
+          "explanation": "This follows the in-place event order {{code:ApplicationStop}}, {{code:DownloadBundle}}, {{code:BeforeInstall}}, {{code:Install}}, {{code:AfterInstall}}, {{code:ApplicationStart}}, {{code:ValidateService}}. A non-zero exit from any hook script marks that lifecycle event, and therefore the deployment on that instance, as failed."
+        }
+      ],
+      "explanation": "For EC2/on-premises deployments, remember the order {{code:ApplicationStop}}, {{code:DownloadBundle}}, {{code:BeforeInstall}}, {{code:Install}}, {{code:AfterInstall}}, {{code:ApplicationStart}}, {{code:ValidateService}}; {{code:DownloadBundle}} and {{code:Install}} are agent-only and cannot run scripts, and the traffic events ({{code:BeforeBlockTraffic}} through {{code:AfterAllowTraffic}}) appear only when a load balancer is configured. Two exam favourites: {{code:ApplicationStop}} executes the scripts from the previously deployed revision (and is skipped on the very first deployment), and {{code:ValidateService}} is the designated place for a post-start smoke test whose non-zero exit fails the deployment.",
+      "references": [
+        {
+          "title": "AppSpec 'hooks' section for EC2/On-Premises deployments",
+          "url": "https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html"
+        },
+        {
+          "title": "CodeDeploy AppSpec file reference",
+          "url": "https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:565ec829bada4909288576ed560554fd3cf44389103336e694603aa4c7fc0652"
+    },
+    {
+      "id": "dva-c03/cicd/0005",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d3",
+      "taskId": "3.4",
+      "services": [
+        "sam",
+        "lambda",
+        "codedeploy",
+        "cloudwatch"
+      ],
+      "tags": [
+        "traffic-shifting",
+        "canary",
+        "deployment-preference",
+        "least-ops-overhead"
+      ],
+      "stem": "A developer deploys a serverless order API with {{t:AWS SAM}}. The {{t:AWS Lambda}} function is invoked through an alias named {{code:live}}. For every deployment the team wants 10% of invocations to go to the new version for 5 minutes, then the remaining 90% to shift at once, a smoke-test function to run after the full shift, and an automatic rollback if an {{t:Amazon CloudWatch}} alarm on the function's {{code:Errors}} metric enters the {{code:ALARM}} state at any point during the deployment. Which solution meets these requirements with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "In the SAM template set {{code:AutoPublishAlias}} to {{code:live}} and add a {{code:DeploymentPreference}} with {{code:Type}} {{code:Canary10Percent5Minutes}}, the alarm listed under {{code:Alarms}}, and the smoke-test function under {{code:Hooks}} as {{code:PostTraffic}}.",
+          "correct": true,
+          "explanation": "{{code:AutoPublishAlias}} publishes a new version and repoints the alias on every deploy, and {{code:DeploymentPreference}} makes SAM create a {{t:CodeDeploy}} application and deployment group that shift alias traffic with the named configuration. {{code:Alarms}} trigger an automatic rollback and {{code:PostTraffic}} runs the hook function after the shift completes, with no custom scripting."
+        },
+        {
+          "id": "b",
+          "text": "In the SAM template set {{code:AutoPublishAlias}} to {{code:live}} and add a {{code:DeploymentPreference}} with {{code:Type}} {{code:Linear10PercentEvery1Minute}}, the same {{code:Alarms}} list and the same {{code:PostTraffic}} hook.",
+          "correct": false,
+          "explanation": "Linear configurations add 10% at every interval until 100% is reached, about 10 minutes here. They never hold at 10% and then jump to 100%, which is the canary pattern the team asked for."
+        },
+        {
+          "id": "c",
+          "text": "Add an {{t:AWS CodeBuild}} step to the pipeline that calls {{code:update-alias}} with {{code:--routing-config}} to give the new version a weight of 0.1, sleeps for 5 minutes, checks the alarm state, and then updates the alias to point only at the new version.",
+          "correct": false,
+          "explanation": "Weighted aliases are the mechanism {{t:CodeDeploy}} uses under the hood, so this can work, but the developer now owns the timing, alarm polling, rollback logic and post-traffic test in a script. {{code:DeploymentPreference}} gives the same behaviour declaratively."
+        },
+        {
+          "id": "d",
+          "text": "Enable canary settings on the {{t:Amazon API Gateway}} stage so that 10% of requests go to a new API deployment that points at the new function version, and promote the canary after 5 minutes.",
+          "correct": false,
+          "explanation": "{{t:API Gateway}} canaries shift traffic between two API deployments of a stage, not between {{t:Lambda}} versions, and promotion and rollback are manual actions that are not tied to the function alarm. It is a different tool for a different layer."
+        }
+      ],
+      "explanation": "SAM's {{code:DeploymentPreference}} wires {{t:CodeDeploy}} traffic shifting into a {{t:Lambda}} alias: canary types such as {{code:Canary10Percent5Minutes}} send 10% and then the rest after the interval, linear types such as {{code:Linear10PercentEvery1Minute}} add 10% every interval, and {{code:AllAtOnce}} shifts immediately. It requires {{code:AutoPublishAlias}}, supports {{code:Alarms}} for automatic rollback, and {{code:PreTraffic}}/{{code:PostTraffic}} hook functions, which map to {{t:CodeDeploy}}'s {{code:BeforeAllowTraffic}} and {{code:AfterAllowTraffic}} events. Canary = hold then jump; linear = steady steps.",
+      "references": [
+        {
+          "title": "Deploying serverless applications gradually (AWS SAM)",
+          "url": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/automating-updates-to-serverless-apps.html"
+        },
+        {
+          "title": "DeploymentPreference property of AWS::Serverless::Function",
+          "url": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-property-function-deploymentpreference.html"
+        },
+        {
+          "title": "Lambda deployments with CodeDeploy",
+          "url": "https://docs.aws.amazon.com/codedeploy/latest/userguide/deployment-steps-lambda.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:af9faf9d4446ffcd2ae9b6f016e8a3f521ba9df9719fc7e6cfa3717bbc8bf902"
+    },
+    {
+      "id": "dva-c03/cicd/0006",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 3,
+      "domainId": "d3",
+      "taskId": "3.4",
+      "services": [
+        "codedeploy",
+        "ecs",
+        "fargate"
+      ],
+      "tags": [
+        "blue-green",
+        "ecs",
+        "appspec",
+        "lifecycle-hooks",
+        "least-ops-overhead"
+      ],
+      "stem": "A development team runs a REST API as an {{t:Amazon ECS}} service on {{t:AWS Fargate}} behind an {{t:Application Load Balancer}} and releases it with {{t:AWS CodeDeploy}}. Every release must be deployed without downtime, the team wants automated smoke tests to run against the new task set through a separate test listener on port 8080 before any production traffic reaches it, and a failed smoke test must stop the release before customers are affected. Which combination of steps should the developer take to meet these requirements with the LEAST operational overhead? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Keep the service's deployment controller set to {{code:ECS}} and configure a {{code:minimumHealthyPercent}} of 100 and a {{code:maximumPercent}} of 200 so that new tasks start before old tasks stop.",
+          "correct": false,
+          "explanation": "That is a rolling update: it avoids downtime, but new tasks join the single production target group as soon as they pass health checks, so there is no test listener, no pre-traffic test gate, and rollback means redeploying the previous task definition."
+        },
+        {
+          "id": "b",
+          "text": "Create the service with the {{code:CODE_DEPLOY}} deployment controller and a {{t:CodeDeploy}} deployment group of the blue/green type that references two target groups, the production listener and a test listener on port 8080.",
+          "correct": true,
+          "explanation": "{{t:CodeDeploy}} blue/green for ECS starts a replacement (green) task set in the second target group, attaches it to the test listener first, and reroutes the production listener only after the hooks succeed. Rollback is a listener switch back to the original task set, which keeps running until the configured termination wait time expires."
+        },
+        {
+          "id": "c",
+          "text": "In the {{code:hooks}} section of {{code:appspec.yaml}}, point {{code:BeforeAllowTraffic}} at a shell script in the revision that runs the smoke tests on the task hosts.",
+          "correct": false,
+          "explanation": "For ECS and {{t:Lambda}} deployments, hooks name {{t:Lambda}} functions, not scripts, because there is no {{t:CodeDeploy}} agent on {{t:Fargate}} tasks. {{code:AfterAllowTestTraffic}} is also the event designed for tests through the test listener; {{code:BeforeAllowTraffic}} is the final gate just before the production listener switches."
+        },
+        {
+          "id": "d",
+          "text": "Run the current and new task definitions as two services behind one target group and use the load balancer's weighted target group rules to move 10% of traffic at a time to the new service.",
+          "correct": false,
+          "explanation": "This hand-rolls a canary with two services that the team must create, scale, shift and clean up. {{t:CodeDeploy}} ECS blue/green needs two target groups, and its {{code:ECSCanary10Percent5Minutes}} and linear configurations provide gradual shifting without that work."
+        },
+        {
+          "id": "e",
+          "text": "Add an {{code:AfterAllowTestTraffic}} hook to {{code:appspec.yaml}} that names a {{t:Lambda}} function; the function runs the smoke tests against port 8080 and calls {{code:PutLifecycleEventHookExecutionStatus}} with {{code:Failed}} if any test fails.",
+          "correct": true,
+          "explanation": "{{code:AfterAllowTestTraffic}} runs after the green task set is attached to the test listener and before production traffic moves. A {{code:Failed}} status from the hook function fails the deployment, and {{t:CodeDeploy}} rolls back by leaving the production listener on the original task set."
+        }
+      ],
+      "explanation": "ECS blue/green with {{t:CodeDeploy}} needs the {{code:CODE_DEPLOY}} deployment controller, two target groups, and a production listener plus an optional test listener. The ECS hook order is {{code:BeforeInstall}}, {{code:AfterInstall}}, {{code:AfterAllowTestTraffic}}, {{code:BeforeAllowTraffic}}, {{code:AfterAllowTraffic}}; each names a {{t:Lambda}} function that must report {{code:Succeeded}} or {{code:Failed}} through {{code:PutLifecycleEventHookExecutionStatus}}. Tests that must run against the new tasks without exposing them to users belong in {{code:AfterAllowTestTraffic}}; {{code:BeforeAllowTraffic}} is a final gate immediately before the production listener switches.",
+      "references": [
+        {
+          "title": "AppSpec 'hooks' section for an Amazon ECS deployment",
+          "url": "https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html"
+        },
+        {
+          "title": "What happens during an Amazon ECS deployment",
+          "url": "https://docs.aws.amazon.com/codedeploy/latest/userguide/deployment-steps-ecs.html"
+        },
+        {
+          "title": "Amazon ECS blue/green deployments with CodeDeploy",
+          "url": "https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-type-bluegreen.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:679ed3f37ca6a1624affa1473ba9b17b6e9442750734153b689f080bb2fa4525"
+    },
+    {
+      "id": "dva-c03/cicd/0007",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 2,
+      "domainId": "d3",
+      "taskId": "3.3",
+      "services": [
+        "codepipeline",
+        "codebuild",
+        "sns",
+        "cloudformation"
+      ],
+      "tags": [
+        "test-stage",
+        "manual-approval",
+        "least-ops-overhead"
+      ],
+      "stem": "A developer owns an {{t:AWS CodePipeline}} pipeline with a GitHub source connected through {{t:AWS CodeConnections}}, an {{t:AWS CodeBuild}} build stage, and two {{t:AWS CloudFormation}} deploy stages named {{code:Deploy-Staging}} and {{code:Deploy-Prod}}. The team now requires that an integration test suite run against the staging API endpoint after every staging deployment, that a failing suite stop the release, and that a release manager receive an email and explicitly approve each production deployment. Which combination of changes meets these requirements with the LEAST operational overhead? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Run the integration test suite inside the existing build action's {{code:buildspec.yml}} before the build artifact is produced.",
+          "correct": false,
+          "explanation": "At build time the new staging stack has not been deployed yet, so the tests would hit the previous staging release or nothing at all. Tests against a deployed environment belong in a stage that runs after that deployment."
+        },
+        {
+          "id": "b",
+          "text": "Disable the transition into {{code:Deploy-Prod}} and have the release manager re-enable it whenever a release is ready for production.",
+          "correct": false,
+          "explanation": "Disabling a transition does hold the pipeline, but it blocks every execution, sends no notification, records no approver or comment, and releases the most recent execution when re-enabled, so it is a blunt instrument rather than an approval."
+        },
+        {
+          "id": "c",
+          "text": "Add a {{code:Test}} stage after {{code:Deploy-Staging}} that contains a {{t:CodeBuild}} action whose buildspec runs the suite against the staging endpoint, so that a non-zero exit fails the action and stops the execution.",
+          "correct": true,
+          "explanation": "A {{t:CodeBuild}} test action is the standard way to run tests inside a pipeline: any failing command fails the action and the execution halts before {{code:Deploy-Prod}}. The staging URL can be passed from the deploy action's stack outputs through a variable namespace, and the test logs land in {{t:Amazon CloudWatch Logs}}."
+        },
+        {
+          "id": "d",
+          "text": "Add an {{t:AWS Lambda}} invoke action that runs the suite and then polls an {{t:Amazon DynamoDB}} table until the release manager writes an approval record for the execution.",
+          "correct": false,
+          "explanation": "A {{t:Lambda}} action must report back with {{code:PutJobSuccessResult}} or {{code:PutJobFailureResult}} and cannot wait for a human: {{t:Lambda}} itself stops at 15 minutes, so the function would need continuation tokens plus a custom approval store for something {{t:CodePipeline}} already provides natively."
+        },
+        {
+          "id": "e",
+          "text": "Add a manual approval action before {{code:Deploy-Prod}} configured with an {{t:Amazon SNS}} topic to which the release manager's email address is subscribed.",
+          "correct": true,
+          "explanation": "The approval action pauses the execution, publishes a notification (with an optional review URL and comment) to the topic, and records who approved or rejected and when. If nobody responds within 7 days the action fails and the execution stops."
+        }
+      ],
+      "explanation": "Automated testing in {{t:CodePipeline}} is just another action, usually {{t:CodeBuild}}, placed after the environment it tests has been deployed; a non-zero exit code is the failure signal. Human sign-off is the built-in manual approval action ({{code:Approval}} category, {{code:Manual}} provider): {{t:SNS}} notification, optional URL and comment, an audit record, and a 7-day timeout. Disabled transitions and {{t:Lambda}} polling loops are workable hacks that cost more and record less.",
+      "references": [
+        {
+          "title": "Manage approval actions in CodePipeline",
+          "url": "https://docs.aws.amazon.com/codepipeline/latest/userguide/approvals.html"
+        },
+        {
+          "title": "CodeBuild build and test action reference",
+          "url": "https://docs.aws.amazon.com/codepipeline/latest/userguide/action-reference-CodeBuild.html"
+        },
+        {
+          "title": "Invoke an AWS Lambda function in a pipeline",
+          "url": "https://docs.aws.amazon.com/codepipeline/latest/userguide/actions-invoke-lambda-function.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:9b0e41a2646113c04528f1b2815c5658e5f93b2340f793400792045b632908ee"
+    },
+    {
+      "id": "dva-c03/cicd/0008",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 3,
+      "domainId": "d3",
+      "taskId": "3.4",
+      "services": [
+        "codepipeline",
+        "cloudformation",
+        "kms",
+        "s3",
+        "sam"
+      ],
+      "tags": [
+        "cross-account",
+        "artifact-bucket",
+        "kms",
+        "troubleshooting"
+      ],
+      "stem": "A developer maintains an {{t:AWS CodePipeline}} pipeline in a shared tooling account. The build stage runs {{code:sam package}} to produce a packaged template, and an {{t:AWS CloudFormation}} deploy action then creates and executes a change set in a separate production account by assuming a cross-account role there. The pipeline was created with the console wizard's defaults, and the cross-account role has the {{code:AdministratorAccess}} policy in the production account. The deploy action still fails with an {{code:AccessDenied}} error when, running as the cross-account role, it tries to read the packaged template from the pipeline's artifact bucket. What should the developer do to resolve the error?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Set the artifact store's {{code:encryptionKey}} to a customer managed {{t:AWS KMS}} key in the tooling account, and grant the production role {{code:kms:Decrypt}} in its key policy and {{code:s3:GetObject}} in the bucket policy.",
+          "correct": true,
+          "explanation": "Wizard-created pipelines encrypt artifacts with the AWS managed key {{code:aws/s3}}, whose key policy cannot be edited to admit another account, so no principal outside the tooling account can decrypt the artifacts. Cross-account access needs a customer managed key plus resource policies on both the key and the bucket that name the other account's role."
+        },
+        {
+          "id": "b",
+          "text": "Enable versioning on the artifact bucket, because {{t:CodePipeline}} requires versioned buckets, grant the production role {{code:s3:GetObjectVersion}} in the bucket policy, and re-run the pipeline.",
+          "correct": false,
+          "explanation": "Versioning is required on a bucket that is used as a pipeline source, not on the artifact store. The bucket policy grant is half of the fix, but the artifacts are still encrypted under the {{code:aws/s3}} key, which the production role can never be allowed to decrypt, so the read still fails."
+        },
+        {
+          "id": "c",
+          "text": "Add a second entry to the pipeline's {{code:artifactStores}} map that points to a bucket owned by the production account so that the deploy action reads artifacts locally.",
+          "correct": false,
+          "explanation": "{{code:artifactStores}} is keyed by AWS Region for cross-Region actions, and every artifact bucket must belong to the pipeline's own account and sit in the Region of the actions that use it; it is not a per-account mapping."
+        },
+        {
+          "id": "d",
+          "text": "Attach the {{code:AmazonS3FullAccess}} managed policy to the cross-account role in the production account and add {{code:kms:*}} to its inline policy so that it can decrypt the artifacts.",
+          "correct": false,
+          "explanation": "The role already has {{code:AdministratorAccess}}. Identity policies in the production account cannot grant access to a bucket or KMS key owned by the tooling account; the resource owner must grant it through the bucket policy and key policy, and the default {{code:aws/s3}} key has no editable policy."
+        }
+      ],
+      "explanation": "Cross-account {{t:CodePipeline}} deployments fail on the artifact store unless (1) artifacts are encrypted with a customer managed {{t:KMS}} key whose key policy names the other account, (2) the artifact bucket policy (and the {{code:sam package}} S3 bucket, if different) grants that account's role access, and (3) the action assumes a role in the target account that trusts the pipeline account. The distinguishing fact is that the default {{code:aws/s3}} key cannot be shared across accounts, which is why {{code:AdministratorAccess}} on the far side changes nothing. Versioning matters only for S3 source buckets, {{code:artifactStores}} is per Region, and the deploy action itself is usually split into {{code:CHANGE_SET_REPLACE}} followed by {{code:CHANGE_SET_EXECUTE}}.",
+      "references": [
+        {
+          "title": "Create a pipeline in CodePipeline that uses resources from another AWS account",
+          "url": "https://docs.aws.amazon.com/codepipeline/latest/userguide/pipelines-create-cross-account.html"
+        },
+        {
+          "title": "Configure server-side encryption for artifacts stored in Amazon S3 for CodePipeline",
+          "url": "https://docs.aws.amazon.com/codepipeline/latest/userguide/S3-artifact-encryption.html"
+        },
+        {
+          "title": "AWS CloudFormation deploy action reference",
+          "url": "https://docs.aws.amazon.com/codepipeline/latest/userguide/action-reference-CloudFormation.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:02a4d29f05748a88c3eb1034f6cd803fc40203e58f489d93e55a0c6f449df89e"
+    },
+    {
+      "id": "dva-c03/cicd/0009",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d3",
+      "taskId": "3.4",
+      "services": [
+        "elastic-beanstalk"
+      ],
+      "tags": [
+        "deployment-policies",
+        "rolling-additional-batch",
+        "most-cost-effective"
+      ],
+      "stem": "A company runs a web application on {{t:AWS Elastic Beanstalk}} in a load-balanced environment with four EC2 instances. Deployments currently use the {{code:AllAtOnce}} policy, which causes a short outage on every release. The team now requires that deployments cause no downtime, that at least four healthy instances serve traffic throughout a deployment, and that the extra capacity paid for during a deployment be kept as small as possible. Which {{code:DeploymentPolicy}} meets these requirements MOST cost-effectively?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "{{code:Rolling}} with a batch size of one instance.",
+          "correct": false,
+          "explanation": "Rolling takes each batch out of service while it is updated, so for most of the deployment only three instances serve traffic; it adds no cost but violates the capacity requirement."
+        },
+        {
+          "id": "b",
+          "text": "{{code:Immutable}}.",
+          "correct": false,
+          "explanation": "Immutable launches a complete second set of instances (one first, then the rest once it passes health checks) in a temporary Auto Scaling group, so capacity never drops and rollback is a clean termination of the new instances, but it doubles the fleet during the deployment, which is more extra capacity than necessary."
+        },
+        {
+          "id": "c",
+          "text": "Blue/green: clone the environment, deploy the new version to the clone, and swap the environment CNAMEs.",
+          "correct": false,
+          "explanation": "A full second environment doubles the cost (instances, load balancer and environment-owned resources) for as long as both exist, and the CNAME swap depends on DNS caches honouring the TTL. It is the right tool for incompatible platform or configuration changes, not the cheapest zero-downtime release."
+        },
+        {
+          "id": "d",
+          "text": "{{code:RollingWithAdditionalBatch}}.",
+          "correct": true,
+          "explanation": "{{t:Elastic Beanstalk}} first launches one extra batch of instances running the new version, so the environment never has fewer than four healthy instances, then rolls through the existing instances batch by batch and finally terminates the surplus batch. Only one batch of extra capacity is paid for, and only during the deployment."
+        }
+      ],
+      "explanation": "The {{t:Elastic Beanstalk}} policies are a cost/capacity/rollback trade-off: {{code:AllAtOnce}} (cheapest, downtime), {{code:Rolling}} (no extra cost, reduced capacity), {{code:RollingWithAdditionalBatch}} (full capacity, one batch extra), {{code:Immutable}} (full capacity, temporary second fleet, cleanest rollback), {{code:TrafficSplitting}} (canary through the load balancer, requires an ALB), and blue/green via CNAME swap (two environments, instant switch). Rolling variants roll back by redeploying the previous version, whereas immutable and blue/green roll back by discarding the new instances or swapping the CNAME back.",
+      "references": [
+        {
+          "title": "Deployment policies and settings (Elastic Beanstalk)",
+          "url": "https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/using-features.rolling-version-deploy.html"
+        },
+        {
+          "title": "Blue/Green deployments with Elastic Beanstalk",
+          "url": "https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/using-features.CNAMESwap.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:06cd0fb39396d512f077393068dd365372fce01181eaf5561fe620a6ca7bc7a1"
+    },
+    {
+      "id": "dva-c03/cicd/0010",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d3",
+      "taskId": "3.1",
+      "services": [
+        "codepipeline",
+        "codebuild",
+        "ecr",
+        "ecs"
+      ],
+      "tags": [
+        "artifacts",
+        "image-tags",
+        "immutability",
+        "rollback"
+      ],
+      "stem": "A developer's {{t:AWS CodePipeline}} pipeline builds a container image in {{t:AWS CodeBuild}}, pushes it to an {{t:Amazon ECR}} repository with the tag {{code:latest}}, and deploys it to an {{t:Amazon ECS}} service through an {{code:imagedefinitions.json}} artifact. After a bad release the team retried the previous pipeline execution, but the service kept running the broken code because the task definition still resolved {{code:latest}} to the newest image. The team needs every running task to be traceable to an exact commit, and retrying an earlier execution must bring back exactly the image that execution built. Which approach meets these requirements MOST reliably?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Keep pushing {{code:latest}}, add an {{t:ECR}} lifecycle policy that retains the 10 most recent images, and rely on the ECS deployment circuit breaker to roll back automatically.",
+          "correct": false,
+          "explanation": "A lifecycle policy only controls how many images are retained, and the circuit breaker rolls back to the last completed deployment, whose task definition also says {{code:latest}} and therefore resolves to the newest push. Neither traceability nor exact rollback is achieved."
+        },
+        {
+          "id": "b",
+          "text": "Keep pushing {{code:latest}} and set the repository's tag mutability to {{code:IMMUTABLE}} so that an image, once pushed, can no longer be overwritten by a later build.",
+          "correct": false,
+          "explanation": "With immutable tags the second push of {{code:latest}} is rejected with {{code:ImageTagAlreadyExistsException}}, so the pipeline breaks on the next release. Immutability is valuable, but only together with a tag that is unique per build."
+        },
+        {
+          "id": "c",
+          "text": "Tag each image with the commit ID from {{code:CODEBUILD_RESOLVED_SOURCE_VERSION}}, reference that tag in {{code:imagedefinitions.json}}, and make the repository's tags {{code:IMMUTABLE}}.",
+          "correct": true,
+          "explanation": "A commit-derived tag makes the artifact's identity part of the deployment: the task definition registered by each execution names a specific image, so retrying an execution redeploys exactly that image, and immutability guarantees nobody can repoint the tag later. {{code:CODEBUILD_RESOLVED_SOURCE_VERSION}} holds the commit ID for pipeline-sourced builds."
+        },
+        {
+          "id": "d",
+          "text": "After each release, manually register a new task definition revision that references the image by its {{code:sha256}} digest instead of a tag.",
+          "correct": false,
+          "explanation": "A digest does pin an exact image (ECS task definitions accept image references by digest), but registering task definitions by hand outside the pipeline is error-prone, a retried execution would not do it, and a digest alone does not tell anyone which commit produced the image."
+        }
+      ],
+      "explanation": "Build artifacts should be immutable and uniquely identified: tag images (and name {{t:Lambda}} zip objects) with the commit ID or build number rather than {{code:latest}}, and turn on {{t:ECR}} tag immutability so a tag can never be reassigned. {{t:CodeBuild}} exposes the commit as {{code:CODEBUILD_RESOLVED_SOURCE_VERSION}}, and the ECS deploy action reads the image to run from {{code:imagedefinitions.json}}. A moving {{code:latest}} tag defeats rollback by re-executing a pipeline and hides which code is actually running.",
+      "references": [
+        {
+          "title": "Image tag mutability (Amazon ECR)",
+          "url": "https://docs.aws.amazon.com/AmazonECR/latest/userguide/image-tag-mutability.html"
+        },
+        {
+          "title": "Environment variables in build environments (CODEBUILD_RESOLVED_SOURCE_VERSION)",
+          "url": "https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-env-vars.html"
+        },
+        {
+          "title": "Amazon ECS standard deployment action reference (imagedefinitions.json)",
+          "url": "https://docs.aws.amazon.com/codepipeline/latest/userguide/action-reference-ECS.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:161e7048a4f2d2df2eff3a1e5d32aeae906beb74feb8019c0be4e968c8a9754c"
+    }
+  ]
+}

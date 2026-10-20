@@ -1,0 +1,778 @@
+{
+  "schemaVersion": 1,
+  "courseId": "dva-c03",
+  "sectionId": "iac-apigw-containers",
+  "title": "SAM, CloudFormation, API Gateway stages and containers",
+  "questions": [
+    {
+      "id": "dva-c03/iac-apigw-containers/0001",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d3",
+      "taskId": "3.1",
+      "services": [
+        "sam",
+        "lambda",
+        "dynamodb",
+        "iam",
+        "api-gateway"
+      ],
+      "tags": [
+        "sam",
+        "policy-templates",
+        "least-privilege",
+        "events"
+      ],
+      "stem": "A developer is writing an {{t:AWS SAM}} template that declares the {{code:AWS::Serverless-2016-10-31}} transform. It defines an {{code:AWS::Serverless::Function}} that is invoked by an {{t:Amazon API Gateway}} REST API and that reads and writes items in a single {{t:Amazon DynamoDB}} table defined as an {{code:AWS::Serverless::SimpleTable}} in the same template. The security team requires that the function's execution role grant access to that one table only. Which approach meets these requirements with the LEAST development effort?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Define an {{code:AWS::IAM::Role}} resource with a hand-written trust policy and a policy document that lists the {{t:DynamoDB}} actions and the table ARN, and reference it in the function's {{code:Role}} property.",
+          "correct": false,
+          "explanation": "This works and can be scoped to one table, but the developer must author and maintain the trust policy, the data-plane permissions and the basic logging permissions by hand. SAM policy templates generate exactly the same scoped policy from a single line, so this is more effort than necessary."
+        },
+        {
+          "id": "b",
+          "text": "Add the {{code:AmazonDynamoDBFullAccess}} managed policy to the function's {{code:Policies}} property so that SAM attaches it to the generated execution role.",
+          "correct": false,
+          "explanation": "It is one line, but the managed policy grants every DynamoDB action on every table in the account, so it violates the requirement to scope access to a single table."
+        },
+        {
+          "id": "c",
+          "text": "Add the {{code:DynamoDBCrudPolicy}} SAM policy template to the function's {{code:Policies}} property with the table's name, and declare the REST API trigger under the function's {{code:Events}} property.",
+          "correct": true,
+          "explanation": "SAM policy templates are pre-built, parameterised IAM policies. {{code:DynamoDBCrudPolicy}} with {{code:TableName}} expands into read/write permissions on that table only, and SAM adds it to the execution role it generates automatically (which already includes basic CloudWatch Logs permissions). The {{code:Events}} property creates the API route and the resource-based permission that lets API Gateway invoke the function."
+        },
+        {
+          "id": "d",
+          "text": "Create an IAM user that is allowed to access the table and pass its access key and secret key to the function through the {{code:Environment}} property.",
+          "correct": false,
+          "explanation": "Long-lived IAM user credentials in environment variables are a security anti-pattern and are unnecessary: a Lambda function obtains temporary credentials from its execution role automatically."
+        }
+      ],
+      "explanation": "In SAM, prefer the {{code:Policies}} property with policy templates (for example {{code:DynamoDBCrudPolicy}}, {{code:S3ReadPolicy}}, {{code:SQSPollerPolicy}}) over hand-written roles or broad managed policies: they are least-privilege by construction and need no IAM authoring. Triggers belong in the function's {{code:Events}} property (types such as {{code:Api}}, {{code:S3}}, {{code:SQS}}, {{code:Schedule}}), which also creates the required invoke permissions or event source mappings. The distinguishing point against the managed-policy distractor is scope: a full-access policy is quick but not limited to one table.",
+      "references": [
+        {
+          "title": "AWS SAM policy templates",
+          "url": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-policy-templates.html"
+        },
+        {
+          "title": "AWS::Serverless::Function",
+          "url": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:b3487af9d3ac90e4018651d6f1258ba894575d428742e728cce940eeab26b8db"
+    },
+    {
+      "id": "dva-c03/iac-apigw-containers/0002",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d3",
+      "taskId": "3.2",
+      "services": [
+        "sam",
+        "lambda",
+        "api-gateway"
+      ],
+      "tags": [
+        "sam-cli",
+        "local-testing",
+        "sam-local-start-api",
+        "sam-build"
+      ],
+      "stem": "A developer is building a serverless REST API with {{t:AWS SAM}}. The template defines an {{code:AWS::Serverless::Api}} resource and several Python {{code:AWS::Serverless::Function}} resources that depend on third-party packages listed in {{code:requirements.txt}}. A frontend teammate needs to call the HTTP endpoints from a browser against the developer's laptop while the handler code is still changing, and no resources may be created in the AWS account yet. Which approach meets these requirements with the LEAST effort?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Run {{code:sam build}}, then run {{code:sam local start-api}} and point the frontend at the local endpoint that it prints.",
+          "correct": true,
+          "explanation": "{{code:sam build}} installs the packages from {{code:requirements.txt}} into the build directory, and {{code:sam local start-api}} reads the template, emulates API Gateway and Lambda in Docker, and serves every route on localhost (port 3000 by default). Nothing is created in the AWS account, and the developer re-runs {{code:sam build}} when code or dependencies change."
+        },
+        {
+          "id": "b",
+          "text": "Run {{code:sam local invoke}} with a sample event JSON file for each function and share the console output with the teammate.",
+          "correct": false,
+          "explanation": "{{code:sam local invoke}} runs one function once with one synthetic event, which is ideal for unit-style checks of a handler, but it does not expose HTTP endpoints that a browser can call."
+        },
+        {
+          "id": "c",
+          "text": "Run {{code:sam deploy --guided}} to create a temporary development stack, share the generated API endpoint URL with the teammate, and delete the stack when the work is done.",
+          "correct": false,
+          "explanation": "{{code:sam deploy --guided}} packages the code to Amazon S3 and creates a real CloudFormation stack, which violates the constraint that no resources may be created in the account yet."
+        },
+        {
+          "id": "d",
+          "text": "Run {{code:sam sync --watch}} so that every saved code change is pushed automatically, and have the teammate call the endpoint of the synced stack.",
+          "correct": false,
+          "explanation": "{{code:sam sync}} speeds up iteration against a stack that is already deployed in AWS by pushing code changes directly to the cloud resources; it is a cloud workflow, not local emulation, so it also creates resources in the account."
+        }
+      ],
+      "explanation": "Remember the SAM CLI verbs by target: {{code:sam local start-api}} gives a local HTTP endpoint emulating API Gateway plus Lambda in Docker, {{code:sam local invoke}} runs a single function with an event file, and {{code:sam deploy}} / {{code:sam sync}} target real AWS resources. Run {{code:sam build}} first whenever functions have dependencies or need compilation. Local emulation reproduces the runtime but not IAM permissions or service quotas, so an integration test in a real account is still needed later.",
+      "references": [
+        {
+          "title": "sam local start-api",
+          "url": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-command-reference-sam-local-start-api.html"
+        },
+        {
+          "title": "sam build",
+          "url": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-command-reference-sam-build.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:0f0442ea94ecd6bb8e5126961430886763785856043591328ac6840136d9187c"
+    },
+    {
+      "id": "dva-c03/iac-apigw-containers/0003",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 3,
+      "domainId": "d3",
+      "taskId": "3.1",
+      "services": [
+        "cloudformation",
+        "parameter-store"
+      ],
+      "tags": [
+        "cross-stack-references",
+        "export-importvalue",
+        "nested-stacks",
+        "outputs"
+      ],
+      "stem": "A platform team manages an {{t:AWS CloudFormation}} stack that creates a VPC, private subnets and a security group. An application team in the same account and Region deploys its own stack and must reference the security group ID. The two teams update their stacks on independent schedules, and the platform team must be prevented from deleting or replacing the security group while any application stack still uses it. Which solution meets these requirements with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Make the application template a nested stack of the platform stack by adding an {{code:AWS::CloudFormation::Stack}} resource, and pass the security group ID to it as a parameter.",
+          "correct": false,
+          "explanation": "Nested stacks are created, updated and deleted as part of their parent, so the application stack would share the platform stack's lifecycle and every application change would be driven through the platform team's root stack. That contradicts the requirement for independent update schedules."
+        },
+        {
+          "id": "b",
+          "text": "Add a parameter to the application template and have the application team look up the security group ID in the console and supply it at each deployment.",
+          "correct": false,
+          "explanation": "This works mechanically but requires a manual lookup on every deployment, and nothing stops the platform team from deleting or replacing the security group while the application stack still references its ID."
+        },
+        {
+          "id": "c",
+          "text": "Write the security group ID to an {{t:AWS Systems Manager Parameter Store}} parameter from the platform stack and resolve it in the application template with an {{code:ssm}} dynamic reference.",
+          "correct": false,
+          "explanation": "A dynamic reference decouples the stacks and avoids manual lookups, but CloudFormation does not track the dependency: the platform stack can still delete the security group, and the application stack would only discover the broken value on its next update."
+        },
+        {
+          "id": "d",
+          "text": "Declare the security group ID in the {{code:Outputs}} section of the platform stack with an {{code:Export}} name, and reference it in the application template with {{code:Fn::ImportValue}}.",
+          "correct": true,
+          "explanation": "This is a cross-stack reference. CloudFormation records that the application stack imports the export, refuses to delete the platform stack or to modify or remove the exported value while it is imported, and lets each team update its own stack independently with no manual steps."
+        }
+      ],
+      "explanation": "Use {{code:Export}} plus {{code:Fn::ImportValue}} when independently managed stacks in the same account and Region must share a value: export names must be unique per account and Region, and an exporting stack cannot be deleted (nor its export changed) while another stack imports it. Use nested stacks when you want to reuse a template as a component of one larger stack with a single lifecycle, or when a template approaches the size limits (51,200 bytes when passed directly, 1 MB when loaded from S3). Cross-stack references do not work across Regions or accounts; for those, pass values through Parameter Store, parameters or StackSets.",
+      "references": [
+        {
+          "title": "Walkthrough: Refer to resource outputs in another CloudFormation stack",
+          "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/walkthrough-crossstackref.html"
+        },
+        {
+          "title": "Fn::ImportValue",
+          "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/intrinsic-function-reference-importvalue.html"
+        },
+        {
+          "title": "Working with nested stacks",
+          "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:154f054543cc26c8a296b61c15a4b01b0a5937bd70204e8503a413f22a0ac003"
+    },
+    {
+      "id": "dva-c03/iac-apigw-containers/0004",
+      "revision": 1,
+      "changeKind": "cosmetic",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 2,
+      "domainId": "d3",
+      "taskId": "3.4",
+      "services": [
+        "cloudformation",
+        "lambda"
+      ],
+      "tags": [
+        "change-sets",
+        "deletion-policy",
+        "update-replace-policy",
+        "drift-detection",
+        "least-ops-overhead"
+      ],
+      "stem": "A developer maintains a production {{t:AWS CloudFormation}} stack that contains an {{t:Amazon RDS}} DB instance and an {{t:AWS Lambda}} function. Before each stack update the team wants to know whether any resource will be replaced, and the database data must survive if the DB instance is ever replaced during an update or the stack is deleted. Which combination of steps will meet these requirements with the LEAST operational overhead? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Create a change set for each update, review the {{code:Replacement}} value of every proposed change, and execute the change set only after approval.",
+          "correct": true,
+          "explanation": "A change set shows what CloudFormation will add, modify or remove before anything happens, including a {{code:Replacement}} flag of {{code:True}}, {{code:False}} or {{code:Conditional}} for each modified resource, so the team can spot a DB instance replacement before executing it."
+        },
+        {
+          "id": "b",
+          "text": "Run drift detection on the stack before every update and review the drift report for the DB instance.",
+          "correct": false,
+          "explanation": "Drift detection compares the current configuration of resources with what the template expects, which reveals out-of-band changes; it says nothing about what a proposed template update will do to the stack."
+        },
+        {
+          "id": "c",
+          "text": "Add {{code:DeletionPolicy: Snapshot}} and {{code:UpdateReplacePolicy: Snapshot}} to the DB instance resource in the template.",
+          "correct": true,
+          "explanation": "{{code:DeletionPolicy}} controls what happens when the resource is removed from the template or the stack is deleted, and {{code:UpdateReplacePolicy}} controls what happens to the old resource when an update replaces it. With {{code:Snapshot}}, CloudFormation takes a DB snapshot automatically in both cases, with no manual steps."
+        },
+        {
+          "id": "d",
+          "text": "Have an operator take a manual DB snapshot before each stack update and before any stack deletion.",
+          "correct": false,
+          "explanation": "This protects the data but depends on a human remembering to do it every time; the declarative policies achieve the same result automatically, so this is more operational overhead."
+        },
+        {
+          "id": "e",
+          "text": "Enable termination protection on the stack.",
+          "correct": false,
+          "explanation": "Termination protection only blocks accidental {{code:DeleteStack}} calls. It does not prevent a DB instance from being replaced during an update, and it does nothing to preserve data when the stack is deliberately deleted after protection is disabled."
+        }
+      ],
+      "explanation": "Preview with change sets (look at the {{code:Replacement}} column); protect stateful resources with {{code:DeletionPolicy}} and its update-time twin {{code:UpdateReplacePolicy}}. Both accept {{code:Retain}} for any resource and {{code:Snapshot}} for snapshot-capable resources such as RDS instances and clusters, ElastiCache, Redshift and EBS volumes. Drift detection and termination protection are real features that answer different questions, which is why they are the tempting wrong options here. Also remember that a failed update rolls the whole stack back to its previous state automatically.",
+      "references": [
+        {
+          "title": "Updating stacks using change sets",
+          "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-updating-stacks-changesets.html"
+        },
+        {
+          "title": "DeletionPolicy attribute",
+          "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-deletionpolicy.html"
+        },
+        {
+          "title": "UpdateReplacePolicy attribute",
+          "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-updatereplacepolicy.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:45a4bc9d6343b443340fd51e0c6c0b1b90983a15c81a3a85264697389769d92f"
+    },
+    {
+      "id": "dva-c03/iac-apigw-containers/0005",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d3",
+      "taskId": "3.2",
+      "services": [
+        "api-gateway",
+        "lambda"
+      ],
+      "tags": [
+        "stages",
+        "stage-variables",
+        "lambda-alias",
+        "deployments",
+        "least-ops-overhead"
+      ],
+      "stem": "A developer maintains one {{t:Amazon API Gateway}} REST API with {{code:dev}} and {{code:prod}} stages that use {{t:AWS Lambda}} proxy integrations. The team publishes new {{t:Lambda}} versions several times a week and wants the {{code:dev}} stage to invoke the newest version while the {{code:prod}} stage keeps invoking an approved version, without maintaining two copies of the API definition and without editing every integration at each release. Which solution meets these requirements with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Create a second REST API for production whose integrations point at the approved function version, and keep updating the integrations of the original API each time a new version is published for development.",
+          "correct": false,
+          "explanation": "Two APIs means two definitions of every resource, method and integration that must be kept in sync by hand, which is exactly the duplication the team wants to avoid, and each release still requires editing integrations."
+        },
+        {
+          "id": "b",
+          "text": "Create {{code:dev}} and {{code:prod}} function aliases, set a stage variable {{code:alias}} on each stage, use {{code:stageVariables.alias}} as the alias in the integration's function ARN, grant both aliases invoke permission, and redeploy the API.",
+          "correct": true,
+          "explanation": "Stage variables are evaluated per stage, so one integration definition resolves to the {{code:dev}} alias on the {{code:dev}} stage and the {{code:prod}} alias on the {{code:prod}} stage. Releasing then means repointing an alias, not touching the API. Because the console cannot infer the target, the developer must add invoke permission for each alias ARN, and the integration change only reaches callers after a new deployment is created for the stage."
+        },
+        {
+          "id": "c",
+          "text": "Set a {{code:STAGE}} environment variable on the function, branch inside the handler on its value so that one function serves both stages, and publish a new version whenever either branch of the code changes.",
+          "correct": false,
+          "explanation": "Environment variables are frozen into a published version, and API Gateway stages do not set them, so one deployed version cannot behave as the newest code for {{code:dev}} and as approved older code for {{code:prod}} at the same time."
+        },
+        {
+          "id": "d",
+          "text": "Enable a canary release on the {{code:prod}} stage, point the canary deployment's integrations at the newest function version, and route 100 percent of the stage traffic to the canary.",
+          "correct": false,
+          "explanation": "A canary release sends a percentage of one stage's traffic to a new deployment so it can be validated before promotion; routing all traffic to it just replaces production, and it does not give the {{code:dev}} and {{code:prod}} stages different targets from one API definition."
+        }
+      ],
+      "explanation": "Stage variables are per-stage name/value pairs that can be used in integration URIs (Lambda function names and aliases, HTTP endpoint hostnames) and read in mapping templates, which makes one API definition serve several environments. Pair them with Lambda aliases so a release is an alias update, and remember to add {{code:lambda:InvokeFunction}} permission for every alias that a stage can resolve to. Nothing you change in resources, methods or integrations is visible to clients until you create a deployment and associate it with a stage; the console's Test feature bypasses this, which is a common source of confusion.",
+      "references": [
+        {
+          "title": "Using stage variables for a REST API in API Gateway",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/stage-variables.html"
+        },
+        {
+          "title": "Use stage variables to call a Lambda alias",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/amazon-api-gateway-using-stage-variables.html"
+        },
+        {
+          "title": "Deploying a REST API in API Gateway",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/how-to-deploy-api.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:f704604c55002930b164e1ee9a2df78d05c207c299929827a6d10621ca834b24"
+    },
+    {
+      "id": "dva-c03/iac-apigw-containers/0006",
+      "revision": 1,
+      "changeKind": "cosmetic",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 2,
+      "domainId": "d3",
+      "taskId": "3.2",
+      "services": [
+        "api-gateway",
+        "lambda"
+      ],
+      "tags": [
+        "lambda-proxy-integration",
+        "cors",
+        "502-malformed-response",
+        "response-format"
+      ],
+      "stem": "A developer converts the {{code:POST /orders}} method of an {{t:Amazon API Gateway}} REST API from a non-proxy integration with mapping templates to an {{t:AWS Lambda}} proxy integration and creates a new deployment. The Node.js handler still returns the plain JavaScript object it returned before. Requests now fail with HTTP 502 and the message {{code:Malformed Lambda proxy response}}, and a single-page application served from another domain reports that the {{code:Access-Control-Allow-Origin}} header is missing on the {{code:POST}} response even though the {{code:OPTIONS}} preflight succeeds. Which combination of changes will resolve both problems? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Add an integration response mapping template in API Gateway that wraps the function output and appends the {{code:Access-Control-Allow-Origin}} header.",
+          "correct": false,
+          "explanation": "With a Lambda proxy integration, API Gateway does not apply integration responses or mapping templates on the way out; it passes the function's output straight to the client. Templates are a non-proxy feature, which is why they stopped working after the switch."
+        },
+        {
+          "id": "b",
+          "text": "Change the handler to return an object with an integer {{code:statusCode}}, a {{code:headers}} map and a {{code:body}} that is a JSON string (for example produced by {{code:JSON.stringify}}).",
+          "correct": true,
+          "explanation": "A proxy integration requires the function to produce the HTTP response itself in a fixed shape: {{code:statusCode}}, optional {{code:headers}} and {{code:multiValueHeaders}}, a string {{code:body}} and optional {{code:isBase64Encoded}}. Anything else is rejected with 502 {{code:Malformed Lambda proxy response}}."
+        },
+        {
+          "id": "c",
+          "text": "Re-run Enable CORS on the {{code:/orders}} resource so that API Gateway adds the header to the responses of every method.",
+          "correct": false,
+          "explanation": "Enable CORS creates the {{code:OPTIONS}} mock integration for the preflight, which is already working. For a proxy integration it cannot add headers to the actual {{code:POST}} response because the backend controls that response entirely."
+        },
+        {
+          "id": "d",
+          "text": "Return the response {{code:body}} as a JSON object instead of a string so that API Gateway can serialize it for the client.",
+          "correct": false,
+          "explanation": "The {{code:body}} field of a proxy response must be a string (or a base64 string with {{code:isBase64Encoded}} set to true); a nested object is one of the classic causes of the 502 malformed-response error."
+        },
+        {
+          "id": "e",
+          "text": "Have the handler include {{code:Access-Control-Allow-Origin}} and any other required CORS headers in the {{code:headers}} map of every response, including error responses.",
+          "correct": true,
+          "explanation": "In a proxy integration the backend is responsible for CORS headers on the actual request. Browsers block the response if the header is absent, so the function must return it on success and failure paths alike."
+        }
+      ],
+      "explanation": "Lambda proxy integration hands the whole HTTP request to the function as an event (method, path, headers, query string, body) and expects the whole HTTP response back in the documented shape; a wrong shape yields 502 {{code:Malformed Lambda proxy response}}. For CORS, the {{code:OPTIONS}} preflight is normally answered by a mock integration created by Enable CORS, but the headers on real responses come from the backend in proxy mode and from the integration/method response configuration in non-proxy mode. Error responses generated by API Gateway itself (for example 4xx from an authorizer) need the header added through gateway responses.",
+      "references": [
+        {
+          "title": "Set up Lambda proxy integrations in API Gateway",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html"
+        },
+        {
+          "title": "Enabling CORS for a REST API resource",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/how-to-cors.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:cf05dc50f93aa72c542ab2ddaeb2a72b3c689f039fcca2d2e408582aee3e0611"
+    },
+    {
+      "id": "dva-c03/iac-apigw-containers/0007",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d3",
+      "taskId": "3.2",
+      "services": [
+        "api-gateway",
+        "lambda",
+        "sqs"
+      ],
+      "tags": [
+        "integration-timeout",
+        "29-seconds",
+        "504",
+        "async-pattern",
+        "throttling",
+        "caching"
+      ],
+      "stem": "A developer exposes a report-generation {{t:AWS Lambda}} function through an {{t:Amazon API Gateway}} REST API with a {{t:Lambda}} proxy integration. The function timeout is 120 seconds, and {{t:Amazon CloudWatch Logs}} show that each invocation completes successfully after about 45 seconds, yet clients receive HTTP 504 after roughly 29 seconds. What should the developer do to resolve the errors?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Increase the function timeout to the 15-minute maximum and raise the memory allocation so that the function has enough time and CPU to return its response.",
+          "correct": false,
+          "explanation": "The function is not timing out; the logs show it finishes in 45 seconds. The 504 is produced by API Gateway, whose REST API integration timeout defaults to 29 seconds regardless of the Lambda timeout."
+        },
+        {
+          "id": "b",
+          "text": "Enable API caching on the stage with a TTL of 3600 seconds and the report parameters as cache keys so that repeated report requests are served from the cache.",
+          "correct": false,
+          "explanation": "The cache can only hold a response that was successfully returned once, and the first call for each report still exceeds the integration timeout; reports with different parameters would miss the cache anyway. (3600 seconds is the maximum TTL; the default is 300.)"
+        },
+        {
+          "id": "c",
+          "text": "Request an increase to the account-level throttling limit of 10,000 requests per second with a burst of 5,000 so that API Gateway stops rejecting the slow requests.",
+          "correct": false,
+          "explanation": "Exceeding the throttling limits produces HTTP 429 Too Many Requests, not 504. Raising them has no effect on a single slow integration."
+        },
+        {
+          "id": "d",
+          "text": "Return HTTP 202 with a job ID immediately, run the report asynchronously (for example from an {{t:Amazon SQS}} queue), and let the client poll a status endpoint for the result.",
+          "correct": true,
+          "explanation": "Work that cannot finish within the integration timeout must be decoupled from the synchronous request: accept the job, process it in the background, and expose the result through a second call (polling), a WebSocket push or a callback. This keeps every API call well under 29 seconds."
+        }
+      ],
+      "explanation": "The REST API integration timeout defaults to 29 seconds (HTTP APIs have a similar 30-second limit); a synchronous backend that takes longer causes a 504 even though the Lambda function itself succeeds, and changing the Lambda timeout does not help. Since 2024 the timeout can be raised above 29 seconds for Regional and private REST APIs through a quota increase (which may reduce the account-level throttle quota), but edge-optimized APIs keep 29 seconds and long synchronous calls stay fragile, so the exam answer is an asynchronous pattern: 202 plus a job ID, then poll or push. Keep the status codes straight: 504 = integration timeout, 429 = throttling (account default 10,000 requests per second, 5,000 burst, or a usage plan limit), 502 = malformed proxy response.",
+      "references": [
+        {
+          "title": "Amazon API Gateway quotas and important notes",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/limits.html"
+        },
+        {
+          "title": "Throttle requests to your REST APIs",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-request-throttling.html"
+        },
+        {
+          "title": "Cache settings for REST APIs in API Gateway",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-caching.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:33f47544d96507e8f2f0ae1ef024e8f98285d418e82efdad349e317134c04b5d"
+    },
+    {
+      "id": "dva-c03/iac-apigw-containers/0008",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "domainId": "d3",
+      "difficulty": 3,
+      "taskId": "3.4",
+      "services": [
+        "elastic-beanstalk"
+      ],
+      "tags": [
+        "deployment-policies",
+        "immutable",
+        "rolling-with-additional-batch",
+        "ebextensions"
+      ],
+      "stem": "A company runs a Node.js web application on an {{t:AWS Elastic Beanstalk}} web server environment with four load-balanced instances. For the next release the team requires that full serving capacity is maintained for the whole deployment and that, if the new version fails its health checks, the environment returns to the previous version by terminating the newly launched instances rather than by running another deployment. The temporary cost of extra instances is acceptable. Which deployment policy meets these requirements with the LOWEST risk to production traffic?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "All at once",
+          "correct": false,
+          "explanation": "All at once deploys the new version to every existing instance simultaneously, so the application is briefly unavailable, and if the version is unhealthy the only way back is to redeploy the previous version."
+        },
+        {
+          "id": "b",
+          "text": "Rolling with an additional batch, with a batch size of one instance",
+          "correct": false,
+          "explanation": "Launching an extra batch first does keep four instances serving throughout, but the policy then updates the existing instances in place batch by batch. If a later batch fails, instances that already received the new version keep it, and rolling back means performing another deployment."
+        },
+        {
+          "id": "c",
+          "text": "Immutable",
+          "correct": true,
+          "explanation": "Immutable deployments launch a full set of new instances in a temporary Auto Scaling group alongside the old ones, so capacity never drops. If the new instances fail health checks, Elastic Beanstalk simply terminates them and the original instances were never touched; only when all new instances are healthy are the old ones replaced."
+        },
+        {
+          "id": "d",
+          "text": "Rolling, with a batch size of 25 percent",
+          "correct": false,
+          "explanation": "Rolling takes each batch out of service while it is updated, so with four instances the environment runs at 75 percent capacity during each batch, and a failed batch still requires a new deployment to roll back."
+        }
+      ],
+      "explanation": "Know the Elastic Beanstalk policies as a ladder of safety versus cost and speed: all at once (fastest, downtime), rolling (no extra instances, reduced capacity, mixed versions), rolling with additional batch (full capacity, one extra batch, rollback is a redeploy), immutable (new instances in a temporary Auto Scaling group, full capacity, doubles instances briefly, failed deployment is undone by terminating the new instances) and traffic splitting (immutable launch plus a canary percentage of traffic for an evaluation period). The policy is set in the environment's rolling updates and deployments configuration or in an {{code:.ebextensions}} config file under the {{code:aws:elasticbeanstalk:command}} namespace. The decisive difference between immutable and rolling with additional batch is how a failure is reversed.",
+      "references": [
+        {
+          "title": "Deployment policies and settings",
+          "url": "https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/using-features.rolling-version-deploy.html"
+        },
+        {
+          "title": "Immutable environment updates",
+          "url": "https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/environmentmgmt-updates-immutable.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:aeb9ef6744bb8b62faac0339f1576a34b7652a45e11dc9f8c086951f64afdb65"
+    },
+    {
+      "id": "dva-c03/iac-apigw-containers/0009",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d3",
+      "taskId": "3.1",
+      "services": [
+        "ecr",
+        "lambda",
+        "eventbridge"
+      ],
+      "tags": [
+        "ecr",
+        "lifecycle-policy",
+        "docker-push",
+        "get-login-password",
+        "image-scanning"
+      ],
+      "stem": "A developer's CI pipeline builds a container image on every commit, authenticates to a private {{t:Amazon ECR}} repository by piping the output of {{code:aws ecr get-login-password}} into {{code:docker login}}, tags the image with the commit hash and runs {{code:docker push}}. After a few months the repository holds thousands of images, storage costs are rising, and only the most recent images are ever deployed. The team wants to keep the 20 most recently pushed images and remove the rest automatically. Which solution meets these requirements with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Create an {{t:ECR}} lifecycle policy on the repository with a rule that uses {{code:imageCountMoreThan}} with a count of 20 and an {{code:expire}} action.",
+          "correct": true,
+          "explanation": "Lifecycle policies are evaluated by ECR itself: a rule with {{code:countType}} {{code:imageCountMoreThan}} and {{code:countNumber}} 20 expires every image beyond the 20 newest, and ECR removes them within about a day of matching, with no code or schedule to maintain. You can preview the rule's effect before saving it."
+        },
+        {
+          "id": "b",
+          "text": "Create an {{t:Amazon EventBridge}} schedule that invokes an {{t:AWS Lambda}} function to list the images and call {{code:BatchDeleteImage}} for all but the newest 20.",
+          "correct": false,
+          "explanation": "This works but reimplements a built-in feature with custom code, a schedule, an IAM role and error handling that must be maintained, so it is more operational overhead than a lifecycle policy."
+        },
+        {
+          "id": "c",
+          "text": "Enable enhanced scanning on the repository so that outdated images are flagged and removed.",
+          "correct": false,
+          "explanation": "Image scanning (basic, or enhanced through Amazon Inspector) reports vulnerabilities in images; it never deletes anything, and age is not a vulnerability."
+        },
+        {
+          "id": "d",
+          "text": "Set the repository's tag mutability to {{code:IMMUTABLE}} so that older tags are overwritten by each new push.",
+          "correct": false,
+          "explanation": "Tag immutability does the opposite: it prevents an existing tag from being overwritten, which protects deployed images from being changed under them but does not remove old images (and the pipeline already uses unique commit-hash tags)."
+        }
+      ],
+      "explanation": "ECR housekeeping is declarative: lifecycle policy rules match images by tag status or prefix and expire them by count ({{code:imageCountMoreThan}}) or age ({{code:sinceImagePushed}}). Remember the surrounding facts the exam likes: {{code:get-login-password}} returns a token valid for 12 hours that is piped into {{code:docker login}}, images are pushed as {{code:registry/repository:tag}}, scanning finds vulnerabilities rather than deleting images, and tag immutability prevents overwrites. Custom clean-up code is the plausible but higher-overhead alternative.",
+      "references": [
+        {
+          "title": "Amazon ECR lifecycle policies",
+          "url": "https://docs.aws.amazon.com/AmazonECR/latest/userguide/LifecyclePolicies.html"
+        },
+        {
+          "title": "Private registry authentication in Amazon ECR",
+          "url": "https://docs.aws.amazon.com/AmazonECR/latest/userguide/registry_auth.html"
+        },
+        {
+          "title": "Pushing a Docker image to an Amazon ECR private repository",
+          "url": "https://docs.aws.amazon.com/AmazonECR/latest/userguide/docker-push-ecr-image.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:696d387127ebf9c7ea5ba97abe236bda5954f44660818c9f62f283a21c870ac1"
+    },
+    {
+      "id": "dva-c03/iac-apigw-containers/0010",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 2,
+      "domainId": "d3",
+      "taskId": "3.1",
+      "services": [
+        "ecs",
+        "fargate",
+        "ecr",
+        "secrets-manager",
+        "dynamodb",
+        "iam"
+      ],
+      "tags": [
+        "task-definition",
+        "task-role",
+        "task-execution-role",
+        "secrets",
+        "most-secure"
+      ],
+      "stem": "A developer is writing an {{t:Amazon ECS}} task definition for a containerized API that will run on {{t:AWS Fargate}}. The container image is stored in a private {{t:Amazon ECR}} repository, the container must receive a database password that is stored in {{t:AWS Secrets Manager}}, and the application code calls {{t:Amazon DynamoDB}} with the AWS SDK. The password must never appear in plaintext in the task definition or in the {{code:RunTask}} request. Which combination of steps will meet these requirements in the MOST secure way? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Attach a policy that grants the required {{t:DynamoDB}} actions and {{code:secretsmanager:GetSecretValue}} to the task execution role, and leave the task role unset.",
+          "correct": false,
+          "explanation": "The task execution role is assumed by the ECS agent on the developer's behalf to pull the image, write logs and fetch referenced secrets; its permissions are never exposed to the application code. SDK calls from inside the container obtain credentials from the task role, and with no task role set on Fargate (which has no instance profile to fall back on) the DynamoDB calls fail for lack of credentials."
+        },
+        {
+          "id": "b",
+          "text": "Call {{code:GetSecretValue}} in the build pipeline and write the password into the {{code:environment}} section of the container definition.",
+          "correct": false,
+          "explanation": "This places the plaintext password in the registered task definition, where anyone with {{code:ecs:DescribeTaskDefinition}} can read it, and it goes stale when the secret rotates."
+        },
+        {
+          "id": "c",
+          "text": "Reference the secret's ARN in the {{code:secrets}} section of the container definition with {{code:valueFrom}}, and grant {{code:secretsmanager:GetSecretValue}} on that secret to the task execution role.",
+          "correct": true,
+          "explanation": "The {{code:secrets}} section injects the value as an environment variable at container start without storing it in the definition. Because the ECS agent retrieves it before the container runs, the permission belongs on the task execution role; without it Fargate tasks fail with a {{code:ResourceInitializationError}} about pulling secrets."
+        },
+        {
+          "id": "d",
+          "text": "Attach an IAM policy that allows only the required {{t:DynamoDB}} actions on the table to the role specified in the task definition's {{code:taskRoleArn}}.",
+          "correct": true,
+          "explanation": "The task role is what the containers' SDK calls assume through the container credentials endpoint, so it is the correct place for the application's own permissions, scoped to the one table."
+        },
+        {
+          "id": "e",
+          "text": "Pass the password in the {{code:command}} override of the {{code:RunTask}} API call so that it is supplied only at launch time.",
+          "correct": false,
+          "explanation": "Command overrides are visible in the {{code:RunTask}} request, in {{code:DescribeTasks}} output and in CloudTrail, so the password would still be exposed in plaintext, which the requirement forbids."
+        }
+      ],
+      "explanation": "Two roles, two jobs: the task execution role (with {{code:AmazonECSTaskExecutionRolePolicy}} plus any secret permissions) is used by the ECS agent to pull the ECR image, send container logs through the {{code:awslogs}} driver and resolve the {{code:secrets}} entries from Secrets Manager or Parameter Store; the task role ({{code:taskRoleArn}}) is what the application code inside the container can call AWS with. Inject sensitive values with {{code:secrets}} / {{code:valueFrom}}, never with {{code:environment}} or command overrides. This split is the same on Fargate and EC2 launch types.",
+      "references": [
+        {
+          "title": "Amazon ECS task execution IAM role",
+          "url": "https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html"
+        },
+        {
+          "title": "Amazon ECS task IAM role",
+          "url": "https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html"
+        },
+        {
+          "title": "Passing sensitive data to a container",
+          "url": "https://docs.aws.amazon.com/AmazonECS/latest/developerguide/specifying-sensitive-data-secrets.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:ccfff9c9b3190afa83dae9712a2659ba7a2dbdd17652953b8f988cd84ebb944f"
+    },
+    {
+      "id": "dva-c03/iac-apigw-containers/0011",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d3",
+      "taskId": "3.4",
+      "services": [
+        "appconfig",
+        "lambda",
+        "cloudwatch",
+        "parameter-store",
+        "dynamodb"
+      ],
+      "tags": [
+        "appconfig",
+        "feature-flags",
+        "gradual-rollout",
+        "validators",
+        "lambda-extension",
+        "least-ops-overhead"
+      ],
+      "stem": "A development team wants to turn on a new checkout feature in an {{t:AWS Lambda}}-based application for a small share of traffic and increase that share over several hours, with an automatic rollback if an {{t:Amazon CloudWatch}} alarm fires during the rollout. The flag value must be validated before it reaches production, and the function must not be redeployed to change the flag. Which solution meets these requirements with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Store the flag in an {{t:AWS Systems Manager Parameter Store}} parameter, read it with {{code:GetParameter}} at the start of each invocation, and change the value by hand in steps while watching the alarm.",
+          "correct": false,
+          "explanation": "This avoids a redeploy, but the gradual rollout, the validation and the rollback are all manual, and calling {{code:GetParameter}} on every invocation adds latency and API throttling risk."
+        },
+        {
+          "id": "b",
+          "text": "Create an {{t:AWS AppConfig}} feature flag with attribute constraints, deploy it with a strategy that grows the target share over several hours and uses the alarm as a monitor, and read it through the {{t:AppConfig}} {{t:Lambda}} extension.",
+          "correct": true,
+          "explanation": "AppConfig is built for this: the deployment strategy (deployment time, growth factor, bake time) rolls the new value out gradually, the environment's CloudWatch alarm monitor triggers an automatic rollback, flag attributes are validated against their constraints before a deployment starts, and the Lambda extension caches the configuration locally and polls for changes so the function code does not change or redeploy."
+        },
+        {
+          "id": "c",
+          "text": "Set the flag as a {{t:Lambda}} environment variable, publish a new function version, and use a weighted alias to shift traffic to the new version over several hours while an operator watches the alarm.",
+          "correct": false,
+          "explanation": "Weighted aliases give a gradual shift, but changing the flag requires publishing a new version (environment variables are frozen into a version), which the requirement rules out, and there is no validation of the value or alarm-based automatic rollback without extra tooling."
+        },
+        {
+          "id": "d",
+          "text": "Store the flag in an {{t:Amazon DynamoDB}} item, read it with {{code:GetItem}} on every invocation, and run a scheduled script that raises the percentage in the item every hour and resets it if the alarm is in the {{code:ALARM}} state.",
+          "correct": false,
+          "explanation": "This is a custom feature-flag system: the script, the alarm handling and any validation must be written and operated by the team, and every invocation pays for a database read."
+        }
+      ],
+      "explanation": "AWS AppConfig separates configuration and feature flags from code: an application has environments and configuration profiles (feature flags or freeform), each deployment uses a strategy that controls growth factor, deployment time and bake time, monitors tied to CloudWatch alarms roll back automatically, and validators (attribute constraints for flags, JSON Schema or Lambda validators for freeform profiles) catch bad values before deployment. Applications read configuration through the AppConfig agent or the Lambda extension, which cache locally and poll in the background instead of calling the API on every request. Parameter Store, environment variables and database rows can hold a flag but offer no managed rollout or rollback.",
+      "references": [
+        {
+          "title": "What is AWS AppConfig?",
+          "url": "https://docs.aws.amazon.com/appconfig/latest/userguide/what-is-appconfig.html"
+        },
+        {
+          "title": "AWS AppConfig integration with Lambda extensions",
+          "url": "https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-integration-lambda-extensions.html"
+        },
+        {
+          "title": "Creating a deployment strategy",
+          "url": "https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-creating-deployment-strategy.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:d1cc2187105f4f056e5da409d55a3a9e4942ddf88f6407cb56afbb4d7756d126"
+    }
+  ]
+}

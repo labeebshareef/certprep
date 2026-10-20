@@ -1,0 +1,17 @@
+{
+  "name": "dva-bank",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "validate": "tsx scripts/validate.ts content/dva-c03",
+    "hash": "tsx scripts/hash.ts content/dva-c03",
+    "normalize": "tsx scripts/normalize.ts content/dva-c03",
+    "glossary": "tsx scripts/build-glossary.ts content/dva-c03",
+    "manifest": "tsx scripts/build-manifest.ts content/dva-c03",
+    "build": "npm run normalize && npm run hash && npm run validate && npm run glossary && npm run manifest",
+    "preview": "npx serve ."
+  },
+  "dependencies": { "zod": "^4.0.0" },
+  "devDependencies": { "tsx": "^4.0.0" }
+}

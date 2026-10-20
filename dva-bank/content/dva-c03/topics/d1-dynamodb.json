@@ -1,0 +1,767 @@
+{
+  "schemaVersion": 1,
+  "courseId": "dva-c03",
+  "sectionId": "dynamodb",
+  "title": "Amazon DynamoDB",
+  "questions": [
+    {
+      "id": "dva-c03/dynamodb/0001",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.3",
+      "services": [
+        "dynamodb"
+      ],
+      "tags": [
+        "key-design",
+        "hot-partition",
+        "write-sharding",
+        "most-efficient"
+      ],
+      "stem": "A developer is designing an {{t:Amazon DynamoDB}} table to store clickstream events for a web analytics product. The application writes about 5,000 events per second around the clock, and the only read pattern is to retrieve the events of a single session, ordered by time, within a given time window. A prototype that used the calendar date as the partition key and the event time as the sort key was throttled during load testing even though the table had far more provisioned write capacity than the workload needed. Which table design will support this workload MOST efficiently?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Use {{code:SessionId}} as the partition key and {{code:EventTimestamp}} as the sort key.",
+          "correct": true,
+          "explanation": "Session IDs are high-cardinality, so 5,000 writes per second are spread across many partitions instead of landing on the single partition that owns today's date. The read pattern maps directly onto a {{code:Query}} with a {{code:KeyConditionExpression}} on {{code:SessionId}} and a {{code:BETWEEN}} condition on the sort key, so no filtering or scanning is needed."
+        },
+        {
+          "id": "b",
+          "text": "Keep the calendar date as the partition key but append a random suffix from 1 to 10 to it, and keep the event time as the sort key so that writes are spread across ten partitions.",
+          "correct": false,
+          "explanation": "Write sharding does spread the writes across ten partitions, but it is a workaround for when no natural high-cardinality key exists. Here every session lookup would have to query all ten shards and filter on {{code:SessionId}}, which multiplies read cost and code complexity when a natural key is available."
+        },
+        {
+          "id": "c",
+          "text": "Use a randomly generated UUID {{code:EventId}} as the partition key with no sort key, which guarantees a perfectly even distribution of writes.",
+          "correct": false,
+          "explanation": "A random UUID does give perfect write distribution, but it destroys the read pattern: the events of one session could only be found with a {{code:Scan}} and a {{code:FilterExpression}}, or by adding a {{t:global secondary index}} that duplicates the data."
+        },
+        {
+          "id": "d",
+          "text": "Keep the calendar date as the partition key and raise the table's provisioned write capacity to 10,000 WCU.",
+          "correct": false,
+          "explanation": "Provisioned capacity is spread across partitions, and each partition serves at most about 1,000 WCU per second. Because every write in a day carries the same partition key value, the traffic concentrates on one partition; adding table-level capacity increases the bill while the hot partition keeps throttling."
+        }
+      ],
+      "explanation": "Pick a partition key with many distinct values that are accessed evenly, and put the attribute you sort or range-query on in the sort key. A partition serves at most about 3,000 RCU or 1,000 WCU per second, so a low-cardinality key such as a date concentrates all writes on one partition and throttles even when table-level capacity is high; adaptive capacity and split-for-heat help only when traffic is spread across different items, and a monotonically increasing sort key keeps every new write on the newest partition. Write sharding (adding a calculated or random suffix) is the fallback when no natural high-cardinality key fits the access pattern, at the cost of fanning reads out across the shards.",
+      "references": [
+        {
+          "title": "Best practices for designing and using partition keys effectively",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html"
+        },
+        {
+          "title": "Using write sharding to distribute workloads evenly",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-sharding.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:72789f4ca02f3671cda38e5db0825300daa87e955877eb4a55aec5cfbcaed3b0"
+    },
+    {
+      "id": "dva-c03/dynamodb/0002",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 3,
+      "domainId": "d1",
+      "taskId": "1.3",
+      "services": [
+        "dynamodb"
+      ],
+      "tags": [
+        "gsi",
+        "lsi",
+        "read-consistency",
+        "index-design"
+      ],
+      "stem": "A developer maintains a production {{t:Amazon DynamoDB}} table named Messages that has {{code:ConversationId}} as the partition key and {{code:SentAt}} as the sort key. A new feature must list only the messages in a conversation whose {{code:Priority}} attribute equals {{code:HIGH}}, and the product team requires that a message flagged as high priority a moment earlier is always included in the response. Which solution will meet these requirements?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Create a {{t:local secondary index}} with {{code:ConversationId}} as the partition key and {{code:Priority}} as the sort key, and query the index with {{code:ConsistentRead=true}}.",
+          "correct": false,
+          "explanation": "An LSI supports strongly consistent reads and would be the ideal design for a new table, but a local secondary index can only be defined when the table is created. The Messages table already exists in production, so this option is not available without creating a new table and migrating the data."
+        },
+        {
+          "id": "b",
+          "text": "Create a {{t:global secondary index}} with {{code:ConversationId}} as the partition key and {{code:Priority}} as the sort key, and query the index with {{code:ConsistentRead=true}}.",
+          "correct": false,
+          "explanation": "Global secondary indexes support only eventually consistent reads. Setting {{code:ConsistentRead=true}} on a {{code:Query}} against a GSI is rejected with a {{code:ValidationException}}, so this request cannot even be made, let alone meet the requirement."
+        },
+        {
+          "id": "c",
+          "text": "Create a {{t:global secondary index}} with {{code:ConversationId}} as the partition key and {{code:Priority}} as the sort key, and query the index with the default read consistency.",
+          "correct": false,
+          "explanation": "This returns exactly the right items efficiently, but a GSI is updated asynchronously after the base table write, so a message flagged milliseconds ago may be missing from the index for a short time. That violates the requirement that recently flagged messages always appear."
+        },
+        {
+          "id": "d",
+          "text": "Query the base table on {{code:ConversationId}} with {{code:ConsistentRead=true}} and a {{code:FilterExpression}} that keeps only items whose {{code:Priority}} is {{code:HIGH}}.",
+          "correct": true,
+          "explanation": "Strongly consistent reads are available only on the base table and on local secondary indexes. Because an LSI cannot be added to an existing table and a GSI is always eventually consistent, a strongly consistent {{code:Query}} on the base table with a filter is the only option that guarantees the latest writes are reflected, at the cost of reading the whole item collection and paying for the filtered-out items."
+        }
+      ],
+      "explanation": "Remember the asymmetries between the index types: an LSI must be created with the table, shares its partition key and its provisioned throughput, is limited to 10 GB of data per partition key value, and supports strongly consistent reads; a GSI can be added at any time with any partition and sort key and has its own provisioned throughput, but it is always eventually consistent, and if a GSI runs out of write capacity, writes to the base table are throttled too. When an existing table needs strongly consistent reads on a non-key attribute, the base table with a filter is the only choice; a brand-new table could use an LSI instead.",
+      "references": [
+        {
+          "title": "Improving data access with secondary indexes",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/SecondaryIndexes.html"
+        },
+        {
+          "title": "Local secondary indexes",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LSI.html"
+        },
+        {
+          "title": "Using global secondary indexes in DynamoDB",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:f5007c9a98af0c2d59733ff0b1dfd784ab309c905a11adbd0ed9d86de4710a9f"
+    },
+    {
+      "id": "dva-c03/dynamodb/0003",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.3",
+      "services": [
+        "dynamodb"
+      ],
+      "tags": [
+        "capacity-units",
+        "rcu",
+        "wcu",
+        "read-consistency",
+        "calculation"
+      ],
+      "stem": "A developer is creating an {{t:Amazon DynamoDB}} table in provisioned capacity mode for an inventory service. The service performs 12 strongly consistent {{code:GetItem}} reads per second, and each item read is 7 KB in size. It also performs 10 standard (non-transactional) {{code:PutItem}} writes per second, each writing a 1.5 KB item. What is the minimum provisioned throughput the developer should configure for the table?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "21 RCU and 15 WCU",
+          "correct": false,
+          "explanation": "This multiplies raw kilobytes without rounding. DynamoDB charges each read in 4 KB blocks and each write in 1 KB blocks, rounded up per item, so a 7 KB read costs 2 units rather than 1.75, and a 1.5 KB write costs 2 units rather than 1.5."
+        },
+        {
+          "id": "b",
+          "text": "24 RCU and 20 WCU",
+          "correct": true,
+          "explanation": "A strongly consistent read of an item up to 4 KB costs 1 RCU; a 7 KB item rounds up to two 4 KB blocks, so each read costs 2 RCU and 12 reads per second need 24 RCU. A standard write of an item up to 1 KB costs 1 WCU; a 1.5 KB item rounds up to 2 WCU, so 10 writes per second need 20 WCU."
+        },
+        {
+          "id": "c",
+          "text": "12 RCU and 20 WCU",
+          "correct": false,
+          "explanation": "12 RCU would be the figure for eventually consistent reads, which cost half as much (0.5 RCU per 4 KB block, so 1 RCU per 7 KB item). The scenario requires strongly consistent reads, which cost the full 1 RCU per 4 KB block."
+        },
+        {
+          "id": "d",
+          "text": "48 RCU and 40 WCU",
+          "correct": false,
+          "explanation": "These are the transactional figures: {{code:TransactGetItems}} and {{code:TransactWriteItems}} consume twice the capacity of a standard strongly consistent read or a standard write. The scenario uses plain {{code:GetItem}} and {{code:PutItem}}, so the doubling does not apply."
+        }
+      ],
+      "explanation": "Memorise the unit table: 1 RCU is one strongly consistent read per second of an item up to 4 KB, or two eventually consistent reads; 1 WCU is one write per second of an item up to 1 KB; transactional reads and writes cost double. Always round each item up to the next 4 KB (reads) or 1 KB (writes) block before multiplying by the request rate. The eventually consistent figure is the distractor most often chosen by mistake, so check which consistency the scenario actually demands.",
+      "references": [
+        {
+          "title": "DynamoDB read and write operations – capacity unit consumption",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html"
+        },
+        {
+          "title": "Read/write capacity mode",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadWriteCapacityMode.html"
+        },
+        {
+          "title": "DynamoDB read consistency",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:27b4cdfc1d21610c4a66c65c7830e034f103621c62bc80b1a0bc1df986819217"
+    },
+    {
+      "id": "dva-c03/dynamodb/0004",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.3",
+      "services": [
+        "dynamodb"
+      ],
+      "tags": [
+        "capacity-modes",
+        "on-demand",
+        "throttling",
+        "exponential-backoff",
+        "least-ops-overhead"
+      ],
+      "stem": "A developer runs a ticketing API whose {{t:Amazon DynamoDB}} table uses provisioned capacity with {{t:DynamoDB auto scaling}} at a 70 percent target utilization. When a popular event goes on sale, write traffic jumps from near zero to its peak within a few seconds, and for several minutes the application logs {{code:ProvisionedThroughputExceededException}} errors even after the {{t:AWS SDK}} has exhausted its automatic retries with exponential backoff. Traffic between sales is negligible. Which change will eliminate the throttling with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Raise the auto scaling target utilization to 90 percent so that the table scales out sooner.",
+          "correct": false,
+          "explanation": "A higher target utilization lets more of the provisioned capacity be consumed before auto scaling adds any, so the table has less headroom, not more. Auto scaling also reacts to {{t:Amazon CloudWatch}} metrics over minutes, which is too slow for a spike that arrives in seconds whatever the target is."
+        },
+        {
+          "id": "b",
+          "text": "Disable auto scaling and provision the table at the highest write capacity that has ever been observed during a sale.",
+          "correct": false,
+          "explanation": "This does stop the throttling, but it pays for peak capacity around the clock when traffic between sales is negligible, and someone has to keep re-estimating the peak as the business grows. That is more cost and more ongoing capacity management than switching capacity modes."
+        },
+        {
+          "id": "c",
+          "text": "Switch the table to on-demand capacity mode.",
+          "correct": true,
+          "explanation": "On-demand mode removes capacity planning entirely: the table instantly accommodates traffic up to double its previous peak and allocates more as new peaks are reached (only growth beyond double the previous peak within 30 minutes can still throttle, which pre-warming the table before an unusually large sale avoids), and you pay per request, which suits a workload that is idle most of the time. Switching mode is a single {{code:UpdateTable}} call and needs no code changes."
+        },
+        {
+          "id": "d",
+          "text": "Wrap every write call in a custom retry loop that implements exponential backoff with jitter.",
+          "correct": false,
+          "explanation": "The SDK already retries throttled requests with exponential backoff and jitter by default, and the scenario says those retries are being exhausted. Another retry layer only delays the same error; it does not add capacity to absorb a sustained spike."
+        }
+      ],
+      "explanation": "Provisioned mode with auto scaling suits predictable or gradually changing traffic, because scaling actions take minutes and burst capacity covers only about 300 seconds of unused throughput. For spiky or unpredictable workloads, on-demand mode is the low-overhead answer: capacity is managed for you and billed per request. The SDK's built-in exponential backoff already handles brief throttling; persistent {{code:ProvisionedThroughputExceededException}} errors mean you need more capacity or a better partition key, not more retries.",
+      "references": [
+        {
+          "title": "Read/write capacity mode",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadWriteCapacityMode.html"
+        },
+        {
+          "title": "Managing throughput capacity automatically with DynamoDB auto scaling",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AutoScaling.html"
+        },
+        {
+          "title": "Error handling with DynamoDB",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Programming.Errors.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:c758816db1581ae88fe6e69a7805bf73573377d241c430def668453bc6dfdb4d"
+    },
+    {
+      "id": "dva-c03/dynamodb/0005",
+      "revision": 1,
+      "changeKind": "cosmetic",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.3",
+      "services": [
+        "dynamodb"
+      ],
+      "tags": [
+        "query-vs-scan",
+        "filter-expression",
+        "projection-expression",
+        "gsi",
+        "most-cost-effective"
+      ],
+      "stem": "A developer owns an {{t:Amazon DynamoDB}} table named Products with {{code:ProductId}} as its only key and about 20 million items. A nightly job collects every product whose {{code:Category}} attribute equals {{code:toys}}, which is roughly 1 percent of the table, by calling {{code:Scan}} with a {{code:FilterExpression}} on {{code:Category}} and a {{code:ProjectionExpression}} that returns three attributes. The job takes more than an hour, consumes a very large number of read capacity units, and throttles the production API while it runs. Which change will make the nightly job MOST cost-effective?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Create a {{t:global secondary index}} with {{code:Category}} as its partition key, project the three attributes the job needs, and {{code:Query}} the index instead.",
+          "correct": true,
+          "explanation": "A {{code:Query}} with a {{code:KeyConditionExpression}} on {{code:Category}} reads only the matching 1 percent of items, so consumed capacity falls by roughly 99 percent and the job finishes in minutes. The GSI has its own provisioned throughput, so the reads that remain no longer compete with the production API on the base table."
+        },
+        {
+          "id": "b",
+          "text": "Run a parallel {{code:Scan}} with {{code:TotalSegments}} set to 8 and process the eight {{code:Segment}} values concurrently from separate workers.",
+          "correct": false,
+          "explanation": "A parallel scan finishes sooner, but each segment still reads its share of all 20 million items, so the total read capacity consumed is identical and is now consumed eight times faster. That makes the throttling of the production API worse, not better."
+        },
+        {
+          "id": "c",
+          "text": "Add a {{code:Limit}} of 100 to the {{code:Scan}} and page through the results by passing {{code:LastEvaluatedKey}} back as {{code:ExclusiveStartKey}}.",
+          "correct": false,
+          "explanation": "{{code:Limit}} caps how many items are evaluated per page before the filter is applied, and the {{code:LastEvaluatedKey}} loop just continues where the previous page stopped. Every item is still read once over the course of the job, so total consumed capacity is unchanged; the job only becomes slower."
+        },
+        {
+          "id": "d",
+          "text": "Narrow the {{code:ProjectionExpression}} so that only the {{code:ProductId}} attribute is returned for each matching item.",
+          "correct": false,
+          "explanation": "A projection expression reduces the data sent back over the network, but DynamoDB still reads each full item and charges read capacity based on the item size, not on the attributes returned. It does nothing about the 99 percent of items that are read and then discarded by the filter."
+        }
+      ],
+      "explanation": "A {{code:Scan}} reads every item in the table and consumes capacity for all of them; a {{code:FilterExpression}} is applied after the read and a {{code:ProjectionExpression}} only trims the response, so neither reduces cost. The only way to pay for just the items you want is to make them addressable by a key, which usually means a secondary index and a {{code:Query}}. Parallel scans and {{code:Limit}} change how fast or how slowly the same capacity is consumed, not how much of it is consumed.",
+      "references": [
+        {
+          "title": "Best practices for querying and scanning data",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-query-scan.html"
+        },
+        {
+          "title": "Scanning tables in DynamoDB",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Scan.html"
+        },
+        {
+          "title": "Querying tables in DynamoDB",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:e8fe000091fc13d0c5a648a6bbdc0a79a1205d09ffc8596d9f6aa3c69fc475b6"
+    },
+    {
+      "id": "dva-c03/dynamodb/0006",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.3",
+      "services": [
+        "dynamodb"
+      ],
+      "tags": [
+        "conditional-writes",
+        "optimistic-locking",
+        "condition-expression",
+        "atomic-counters"
+      ],
+      "stem": "A developer is building a collaborative editing feature in which a client reads a document item from an {{t:Amazon DynamoDB}} table, lets the user modify it, and then writes the whole item back with {{code:PutItem}}. During testing, two users who opened the same document and saved a few seconds apart lost the changes of whichever user saved first. The developer must make sure that a save is rejected whenever the stored item has changed since that client read it. Which approach should the developer use?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Perform the initial read with {{code:ConsistentRead=true}} so that each client always starts editing from the latest committed version of the item.",
+          "correct": false,
+          "explanation": "A strongly consistent read guarantees the client sees the latest committed data at the moment of the read, but it does nothing about writes that happen between that read and the client's {{code:PutItem}} seconds later. The second save still overwrites the first one."
+        },
+        {
+          "id": "b",
+          "text": "Wrap the {{code:PutItem}} in a {{code:TransactWriteItems}} request so that the write is performed atomically and in isolation from other writers.",
+          "correct": false,
+          "explanation": "A transaction makes a group of writes all-or-nothing and isolated from one another, but a single unconditional put inside a transaction still replaces whatever is stored. Without a condition on the item's state the lost update is unchanged, and the transaction costs twice the write capacity."
+        },
+        {
+          "id": "c",
+          "text": "Add a numeric {{code:Version}} attribute to the item, write with a {{code:ConditionExpression}} that requires {{code:Version}} to equal the value the client read, and increment it in the same write.",
+          "correct": true,
+          "explanation": "This is optimistic locking. DynamoDB evaluates the condition atomically against the current item, so if another client has already bumped {{code:Version}}, the write is rejected with {{code:ConditionalCheckFailedException}} and the stored item is left untouched; the client can then reload the latest item and reapply or merge its changes."
+        },
+        {
+          "id": "d",
+          "text": "Replace the {{code:PutItem}} with an {{code:UpdateItem}} whose {{code:UpdateExpression}} uses {{code:ADD Version :one}} so that every save atomically increments the version number.",
+          "correct": false,
+          "explanation": "An atomic counter guarantees that the increment itself is applied correctly under concurrency, but it imposes no condition on the write. Both users' updates still succeed in turn, so the second save overwrites the first user's attributes exactly as before."
+        }
+      ],
+      "explanation": "Conditional writes are the DynamoDB primitive for concurrency control: a {{code:ConditionExpression}} is checked atomically with the write, and a failing check raises {{code:ConditionalCheckFailedException}} and leaves the item unchanged (set {{code:ReturnValuesOnConditionCheckFailure}} to get the current item back in the error). Optimistic locking is simply a conditional write keyed on a version attribute. Atomic counters ({{code:ADD}} or {{code:SET x = x + :n}}) solve a different problem, safe increments, and are not idempotent, whereas a conditional write is.",
+      "references": [
+        {
+          "title": "Condition expressions",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ConditionExpressions.html"
+        },
+        {
+          "title": "Working with items and attributes – atomic counters and conditional writes",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:b4582858fd3d836666c09934751a990ef3df40c395d0092b025ee31d0683b75d"
+    },
+    {
+      "id": "dva-c03/dynamodb/0007",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d1",
+      "taskId": "1.3",
+      "services": [
+        "dynamodb"
+      ],
+      "tags": [
+        "batch-write-item",
+        "unprocessed-items",
+        "limits",
+        "exponential-backoff"
+      ],
+      "stem": "A developer wrote a migration script that loads 100,000 records from a CSV file into an {{t:Amazon DynamoDB}} table by calling {{code:BatchWriteItem}} with 25 {{code:PutRequest}} entries per call. The script completes without raising a single exception, but a count afterwards shows that about 3 percent of the records are missing from the table. What is the MOST likely cause of the missing records?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Some batches exceeded the 16 MB request size limit, so DynamoDB wrote the items that fit and silently dropped the rest.",
+          "correct": false,
+          "explanation": "A request larger than 16 MB, or with more than 25 items, is rejected as a whole with a {{code:ValidationException}}; DynamoDB never writes part of a request and discards the remainder silently. Because the script saw no exceptions, size limits are not the cause."
+        },
+        {
+          "id": "b",
+          "text": "Some batches were partially throttled and DynamoDB returned the unwritten items in {{code:UnprocessedItems}}, which the script never retried.",
+          "correct": true,
+          "explanation": "{{code:BatchWriteItem}} is not atomic: when capacity runs out, the call still succeeds with HTTP 200, writes what it can, and lists the remaining items in the {{code:UnprocessedItems}} field of the response. The caller must loop, resubmitting those items with exponential backoff, until the field comes back empty."
+        },
+        {
+          "id": "c",
+          "text": "{{code:BatchWriteItem}} skips a {{code:PutRequest}} whenever an item with the same key already exists in the table.",
+          "correct": false,
+          "explanation": "A {{code:PutRequest}} replaces any existing item with the same key, exactly like {{code:PutItem}}. What a batch cannot do is a conditional put or an {{code:UpdateItem}}; it never skips writes based on existing data."
+        },
+        {
+          "id": "d",
+          "text": "Items larger than 64 KB are rejected by {{code:BatchWriteItem}} and are silently excluded from the batch.",
+          "correct": false,
+          "explanation": "The item size limit is 400 KB for every write API, including batches. An oversized item causes the entire batch to fail with a {{code:ValidationException}}, which would have surfaced in the script, so this cannot explain a silent loss."
+        }
+      ],
+      "explanation": "A successful {{code:BatchWriteItem}} response does not mean every item was written: always check {{code:UnprocessedItems}} and retry them with exponential backoff (the same applies to {{code:UnprocessedKeys}} from {{code:BatchGetItem}}). Limits worth memorising: {{code:BatchWriteItem}} takes up to 25 put or delete requests and 16 MB per call with no update support; {{code:BatchGetItem}} takes up to 100 items and 16 MB; {{code:TransactWriteItems}} takes up to 100 actions and is all-or-nothing, which batches are not; any single item is capped at 400 KB.",
+      "references": [
+        {
+          "title": "BatchWriteItem API reference",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html"
+        },
+        {
+          "title": "BatchGetItem API reference",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchGetItem.html"
+        },
+        {
+          "title": "Amazon DynamoDB transactions",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:b1b613f8587ab616168bd1453e6a7f66ba7e391a5c9c864c80337c5ac75939eb"
+    },
+    {
+      "id": "dva-c03/dynamodb/0008",
+      "revision": 1,
+      "changeKind": "cosmetic",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.3",
+      "services": [
+        "dynamodb",
+        "lambda",
+        "kinesis"
+      ],
+      "tags": [
+        "dynamodb-streams",
+        "lambda",
+        "event-source-mapping",
+        "kinesis",
+        "least-ops-overhead"
+      ],
+      "stem": "A developer must notify a fulfilment service whenever the {{code:Status}} attribute of an order in an {{t:Amazon DynamoDB}} table changes. Each notification must contain both the previous and the new status, notifications for the same order must be delivered in the order in which the changes happened, and a temporary outage of the fulfilment service must not lose any change. Which combination of actions will meet these requirements with the LEAST operational overhead? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Enable {{t:Amazon Kinesis Data Streams}} for the table and process the records with a {{t:Lambda}} consumer.",
+          "correct": false,
+          "explanation": "Kinesis Data Streams for DynamoDB offers up to one year of retention and many consumers, but records can arrive out of order and may be duplicated, so the function would have to sort by {{code:ApproximateCreationDateTime}} and de-duplicate itself. That is extra code and extra infrastructure for a requirement that {{t:DynamoDB Streams}} already satisfies."
+        },
+        {
+          "id": "b",
+          "text": "Enable {{t:DynamoDB Streams}} on the table with the {{code:NEW_AND_OLD_IMAGES}} stream view type.",
+          "correct": true,
+          "explanation": "With {{code:NEW_AND_OLD_IMAGES}} every stream record carries the item as it was before and after the modification, so the function can read the old and new {{code:Status}} values directly without any extra lookups. Stream records for a given item appear exactly once and in the order in which the changes were made."
+        },
+        {
+          "id": "c",
+          "text": "Configure the stream's retention period to 7 days so that records survive a long outage of the fulfilment service.",
+          "correct": false,
+          "explanation": "DynamoDB Streams retention is fixed at 24 hours and cannot be changed. Durability across a downstream outage comes from the Lambda event source mapping's retry behaviour and on-failure destination, not from stream retention."
+        },
+        {
+          "id": "d",
+          "text": "Modify the application so that it publishes a message to an {{t:Amazon SNS}} topic immediately after each successful {{code:UpdateItem}} call on the table.",
+          "correct": false,
+          "explanation": "This dual-write approach can work but adds code to every write path, misses changes made by other clients or by the console, and loses the notification if the process crashes between the {{code:UpdateItem}} and the publish. The stream captures every change on the server side with no application code."
+        },
+        {
+          "id": "e",
+          "text": "Create a {{t:Lambda}} event source mapping on the stream and configure a maximum retry count together with an on-failure destination such as an {{t:Amazon SQS}} queue.",
+          "correct": true,
+          "explanation": "The event source mapping polls each shard and invokes the function with batches in order, retrying a failed batch until it succeeds or the retry limit or record age is reached, which preserves per-order ordering during a short outage. The on-failure destination keeps the details of any batch that still cannot be processed, so no change is lost silently and a bad record does not block the shard forever."
+        },
+        {
+          "id": "f",
+          "text": "Enable {{t:DynamoDB Streams}} with the {{code:KEYS_ONLY}} stream view type and have the function read the current item with {{code:GetItem}}.",
+          "correct": false,
+          "explanation": "{{code:KEYS_ONLY}} records contain only the key attributes, and a {{code:GetItem}} at processing time returns the current state of the item, not the state before the change. The previous status required by the notification would be unavailable, and the extra read costs capacity."
+        }
+      ],
+      "explanation": "{{t:DynamoDB Streams}} is the native, ordered, exactly-once change log of a table: records are retained for 24 hours, the view type decides what each record contains ({{code:KEYS_ONLY}}, {{code:NEW_IMAGE}}, {{code:OLD_IMAGE}} or {{code:NEW_AND_OLD_IMAGES}}), and a {{t:Lambda}} event source mapping gives you ordered processing per shard with built-in retries, batch bisecting, record-age limits and failure destinations. Choose {{t:Kinesis Data Streams}} for DynamoDB instead when you need longer retention, more consumers or the Kinesis tooling and can tolerate reordering and duplicates.",
+      "references": [
+        {
+          "title": "Change data capture for DynamoDB Streams",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html"
+        },
+        {
+          "title": "DynamoDB Streams and AWS Lambda triggers",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.Lambda.html"
+        },
+        {
+          "title": "Using Kinesis Data Streams to capture changes to DynamoDB",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/kds.html"
+        },
+        {
+          "title": "Using AWS Lambda with Amazon DynamoDB",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/with-ddb.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:40c816322454565c3b2cfcb4badfb4ec87b8b1a9c0cde17d1442f85f46584959"
+    },
+    {
+      "id": "dva-c03/dynamodb/0009",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 3,
+      "domainId": "d1",
+      "taskId": "1.3",
+      "services": [
+        "dynamodb",
+        "dax",
+        "elasticache"
+      ],
+      "tags": [
+        "dax",
+        "caching",
+        "elasticache",
+        "fewest-code-changes",
+        "read-latency"
+      ],
+      "stem": "A developer maintains a product catalogue API that runs on {{t:Amazon ECS}} tasks inside a VPC and reads from an {{t:Amazon DynamoDB}} table with {{code:GetItem}} and {{code:Query}} calls made through the {{t:AWS SDK}}. The same few thousand popular products account for most reads, the data changes rarely, and the API can tolerate reads that lag a write by a few seconds. A new partner integration requires read latency measured in microseconds, far below the single-digit milliseconds that DynamoDB currently delivers. The team already operates an {{t:Amazon ElastiCache}} for Redis cluster for session storage. Which solution will meet the latency requirement with the FEWEST code changes?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Add cache-aside logic to the API that checks the existing {{t:ElastiCache}} for Redis cluster before every DynamoDB read and populates the cache on a miss.",
+          "correct": false,
+          "explanation": "Redis delivers sub-millisecond reads and the cluster already exists, so this works, but every read path must gain cache lookup, population, serialisation and invalidation code, and stale entries must be expired by the application. It is the right tool for caching arbitrary or computed data, not the fewest-changes answer for caching DynamoDB items."
+        },
+        {
+          "id": "b",
+          "text": "Increase the table's provisioned read capacity units and enable auto scaling on the table.",
+          "correct": false,
+          "explanation": "Capacity settings control how many reads per second the table accepts, not how long each read takes. DynamoDB latency stays in the single-digit millisecond range however much throughput is provisioned, so the microsecond target is not reached."
+        },
+        {
+          "id": "c",
+          "text": "Set {{code:ConsistentRead=true}} on every {{code:GetItem}} and {{code:Query}} so that the reads are served by the leader storage node.",
+          "correct": false,
+          "explanation": "Strongly consistent reads cost twice the read capacity and are no faster than eventually consistent reads; they still travel to the DynamoDB service. They also bypass any cache, because a cache can only serve eventually consistent data."
+        },
+        {
+          "id": "d",
+          "text": "Create a {{t:DynamoDB Accelerator}} cluster in the VPC and point the API at it by swapping the DynamoDB client for the DAX client from the SDK.",
+          "correct": true,
+          "explanation": "DAX is a write-through, in-memory cache that is API-compatible with DynamoDB: the same {{code:GetItem}} and {{code:Query}} calls go through the DAX client, cache hits return in microseconds, and writes made through DAX update both the cache and the table. Because the API accepts eventually consistent data, DAX fits with essentially a client swap and a new endpoint."
+        }
+      ],
+      "explanation": "{{t:DynamoDB Accelerator}} is the answer when the question says microsecond reads, read-heavy repeated access, eventual consistency is acceptable, and minimal code changes: it is a drop-in client for DynamoDB operations that lives in your VPC. It does not help strongly consistent reads (those are passed straight through to DynamoDB and are not cached), and it caches only DynamoDB responses. Use {{t:Amazon ElastiCache}} when you need to cache computed results, aggregations or data from several sources, accepting that the application must manage the cache itself.",
+      "references": [
+        {
+          "title": "In-memory acceleration with DynamoDB Accelerator (DAX)",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DAX.html"
+        },
+        {
+          "title": "DAX: How it works",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DAX.concepts.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:d2c5d8bae1aef5cf4e4f6280c5ae72d62fdcf3b1891e60cd0eb91218ce0bce3a"
+    },
+    {
+      "id": "dva-c03/dynamodb/0010",
+      "revision": 1,
+      "changeKind": "cosmetic",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 1,
+      "domainId": "d1",
+      "taskId": "1.3",
+      "services": [
+        "dynamodb"
+      ],
+      "tags": [
+        "ttl",
+        "filter-expression",
+        "most-cost-effective"
+      ],
+      "stem": "A developer stores web session items in an {{t:Amazon DynamoDB}} table and must remove each session 30 minutes after its last activity. During testing the developer notices that sessions are sometimes still returned by {{code:Query}} calls after their expiry time has passed. Which combination of steps will remove expired sessions and keep them out of query results MOST cost-effectively? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Enable {{t:Time to Live}} on the table and, on every activity, set the TTL attribute to the expiry time as a Number containing seconds since the Unix epoch.",
+          "correct": true,
+          "explanation": "TTL deletes items whose configured attribute holds an epoch-seconds timestamp in the past, and the background deletes consume no write capacity and cost nothing. Refreshing the attribute on each activity keeps a live session alive for another 30 minutes."
+        },
+        {
+          "id": "b",
+          "text": "Enable {{t:Time to Live}} on the table and store the expiry time in the TTL attribute as an ISO 8601 string such as {{code:2026-10-20T14:30:00Z}}.",
+          "correct": false,
+          "explanation": "TTL only recognises a Number attribute containing seconds since the epoch. Items whose TTL attribute is a string, or any other type, are simply never expired, so the sessions would accumulate forever."
+        },
+        {
+          "id": "c",
+          "text": "Add a {{code:FilterExpression}} to the queries, or an equivalent check in the application, that excludes items whose TTL attribute is less than or equal to the current time.",
+          "correct": true,
+          "explanation": "TTL deletion runs in the background and typically completes within a few days of expiry, so an expired item can still be returned by reads until it is actually removed. Filtering on the expiry attribute hides those items immediately and costs nothing beyond the read that already happened."
+        },
+        {
+          "id": "d",
+          "text": "Increase the table's provisioned write capacity so that TTL deletions are processed faster.",
+          "correct": false,
+          "explanation": "TTL deletions are performed by DynamoDB as a background process that does not consume the table's write capacity and whose speed cannot be tuned. Raising WCU adds cost without changing when expired items disappear."
+        },
+        {
+          "id": "e",
+          "text": "Schedule an {{t:Amazon EventBridge}} rule that invokes a {{t:Lambda}} function every minute to {{code:Scan}} the table and delete every expired session.",
+          "correct": false,
+          "explanation": "This removes items promptly, but every run consumes read capacity for the whole table plus write capacity for each delete, and it adds a function to maintain. TTL does the same job for free, and a filter solves the visibility problem without any scanning."
+        }
+      ],
+      "explanation": "{{t:Time to Live}} deletes items for free in the background once the Number attribute you nominate (seconds since the epoch) is in the past, which makes it the cost-effective way to purge sessions, logs and cache entries; deletions typically happen within a few days and appear in {{t:DynamoDB Streams}} as deletes made by the service principal. Because expiry and deletion are not simultaneous, always filter on the expiry attribute in reads if expired items must never be shown. A string timestamp is silently ignored by TTL.",
+      "references": [
+        {
+          "title": "Expiring items by using DynamoDB Time to Live (TTL)",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html"
+        },
+        {
+          "title": "How Time to Live works",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/howitworks-ttl.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:34aa0ee0840731e7e88b505c8f86dd8627541bd358748eaeb0b790c1c1fe6d44"
+    },
+    {
+      "id": "dva-c03/dynamodb/0011",
+      "revision": 1,
+      "changeKind": "cosmetic",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 1,
+      "domainId": "d1",
+      "taskId": "1.3",
+      "services": [
+        "dynamodb",
+        "lambda"
+      ],
+      "tags": [
+        "sdk",
+        "lambda",
+        "document-client",
+        "best-practices",
+        "latency"
+      ],
+      "stem": "A developer has a Node.js {{t:AWS Lambda}} function behind {{t:Amazon API Gateway}} that fetches one item from an {{t:Amazon DynamoDB}} table per request by using the {{t:AWS SDK for JavaScript}} v3. The handler creates a new {{code:DynamoDBClient}} on every invocation, and the code is cluttered with explicit attribute type descriptors such as {{code:S}} and {{code:N}} when building requests and reading responses. The developer wants to lower the function's latency and simplify the code. Which combination of changes will achieve this with the LEAST effort? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Keep creating the client inside the handler but call {{code:destroy()}} on it before the handler returns so that connections are never reused between requests.",
+          "correct": false,
+          "explanation": "Creating and tearing down a client on every invocation is exactly what makes each request slow, because the SDK must re-resolve its configuration and open a new HTTPS connection each time. Connection reuse is the goal, not something to avoid."
+        },
+        {
+          "id": "b",
+          "text": "Replace the {{code:GetItem}} call with a {{code:Scan}} that uses a {{code:FilterExpression}} on the key attribute so that the request needs fewer parameters.",
+          "correct": false,
+          "explanation": "A {{code:Scan}} reads the whole table and applies the filter afterwards, consuming capacity for every item and taking far longer than a keyed read. It increases latency and cost instead of reducing them."
+        },
+        {
+          "id": "c",
+          "text": "Instantiate the {{code:DynamoDBClient}} once at module scope, outside the handler, so that warm invocations reuse it.",
+          "correct": true,
+          "explanation": "Lambda freezes and reuses the execution environment between invocations, so anything created outside the handler, including the SDK client and its keep-alive HTTPS connection, survives across warm invocations. Only the first (cold) invocation pays the initialisation cost."
+        },
+        {
+          "id": "d",
+          "text": "Increase the function timeout to the 15-minute maximum so that slow requests have more time to complete.",
+          "correct": false,
+          "explanation": "The timeout is an upper bound after which Lambda terminates the invocation; it has no effect on how quickly a request runs. Raising it neither reduces latency nor simplifies the code."
+        },
+        {
+          "id": "e",
+          "text": "Wrap the client with {{code:DynamoDBDocumentClient}} from {{code:@aws-sdk/lib-dynamodb}} so that plain JavaScript objects are marshalled to and from DynamoDB attribute values automatically.",
+          "correct": true,
+          "explanation": "The document client converts native JavaScript types (strings, numbers, arrays, objects) to and from the {{code:S}}, {{code:N}}, {{code:L}} and {{code:M}} attribute-value format for you, so request and response code reads like ordinary objects. It is a thin wrapper around the existing client and changes nothing about the table."
+        }
+      ],
+      "explanation": "Two habits for DynamoDB from Lambda: initialise SDK clients (and anything else expensive) outside the handler so that warm invocations reuse them, and use the document client ({{code:DynamoDBDocumentClient}} in SDK v3, {{code:AWS.DynamoDB.DocumentClient}} in v2) so that you work with native objects instead of hand-writing attribute type descriptors. Neither changes table design or cost. Timeout, memory and API choice are separate levers: a keyed {{code:GetItem}} or {{code:Query}} is always preferable to a {{code:Scan}}.",
+      "references": [
+        {
+          "title": "Best practices for working with AWS Lambda functions",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/best-practices.html"
+        },
+        {
+          "title": "Programming Amazon DynamoDB with JavaScript",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/programming-with-javascript.html"
+        },
+        {
+          "title": "@aws-sdk/lib-dynamodb package",
+          "url": "https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/Package/-aws-sdk-lib-dynamodb/"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:e2e07db3c8e2d9f848039e23e82ac461c91f1f7db0b9b2cd813eac10f7826e5b"
+    }
+  ]
+}

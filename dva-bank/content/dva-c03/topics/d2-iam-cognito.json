@@ -1,0 +1,715 @@
+{
+  "schemaVersion": 1,
+  "courseId": "dva-c03",
+  "sectionId": "iam-cognito",
+  "title": "IAM, STS and Amazon Cognito",
+  "questions": [
+    {
+      "id": "dva-c03/iam-cognito/0001",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d2",
+      "taskId": "2.1",
+      "services": [
+        "iam",
+        "s3"
+      ],
+      "tags": [
+        "credentials",
+        "instance-profile",
+        "most-secure",
+        "no-hardcoded-keys"
+      ],
+      "stem": "A developer is deploying a Python application to an {{t:Amazon EC2}} instance. The application uses the {{t:AWS SDK for Python (Boto3)}} to write objects to an {{t:Amazon S3}} bucket. During a code review, a teammate notices that an {{t:IAM}} user's access key ID and secret access key are stored in a configuration file that is committed to the repository. Which approach will let the application access the bucket in the MOST secure way?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Move the access key ID and secret access key out of the configuration file and into the {{code:AWS_ACCESS_KEY_ID}} and {{code:AWS_SECRET_ACCESS_KEY}} environment variables on the instance.",
+          "correct": false,
+          "explanation": "This takes the secret out of the repository, but the application still runs with a long-term credential that must be rotated by hand and can be read by anyone who can inspect the process environment. A static key is not the MOST secure option when a role is available."
+        },
+        {
+          "id": "b",
+          "text": "Encrypt the configuration file with {{t:AWS KMS}} and have the application decrypt it at startup before it creates the {{t:S3}} client.",
+          "correct": false,
+          "explanation": "Encrypting the file protects it at rest, yet the application still ends up holding the same long-lived {{t:IAM}} user key in memory, rotation is still manual, and the instance now also needs {{t:KMS}} permissions. It adds complexity without removing the static credential."
+        },
+        {
+          "id": "c",
+          "text": "Attach an {{t:IAM}} role that allows the required {{t:S3}} actions to the instance through an {{t:instance profile}}, and delete the keys from the repository and the code.",
+          "correct": true,
+          "explanation": "With an {{t:instance profile}} the SDK's default credential provider chain fetches short-lived credentials from the instance metadata service and refreshes them automatically. No long-term secret exists anywhere in the code, the file system or the environment, and the permissions are scoped by the role's policy."
+        },
+        {
+          "id": "d",
+          "text": "Store the access key pair in {{t:AWS Secrets Manager}} and have the application call {{code:GetSecretValue}} at startup to retrieve it.",
+          "correct": false,
+          "explanation": "{{t:Secrets Manager}} is the right home for third-party secrets such as database passwords, but an application's own AWS identity does not need a stored key at all when it can run under a role. The retrieved key is still a static credential with the same rotation and leakage problems."
+        }
+      ],
+      "explanation": "Code that runs on AWS compute should never carry long-term access keys. Give the compute a role ({{t:instance profile}} on {{t:EC2}}, task role on {{t:ECS}}, execution role on {{t:Lambda}}) and let the SDK's default credential provider chain pick up the temporary credentials it provides; they are rotated automatically and scoped by the role's policy. Moving a static key into environment variables, {{t:KMS}} or {{t:Secrets Manager}} hides it better, but the distinguishing point is that a role removes the long-term credential entirely instead of relocating it.",
+      "references": [
+        {
+          "title": "Use an IAM role to grant permissions to applications running on Amazon EC2 instances",
+          "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-ec2.html"
+        },
+        {
+          "title": "Security best practices in IAM",
+          "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html"
+        },
+        {
+          "title": "AWS SDKs and Tools – credential providers",
+          "url": "https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:31bb2224e735299a00bc627d5f67e72a1e8632ead3fa48a42d8423608928ef5d"
+    },
+    {
+      "id": "dva-c03/iam-cognito/0002",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d2",
+      "taskId": "2.1",
+      "services": [
+        "ecs",
+        "iam",
+        "dynamodb"
+      ],
+      "tags": [
+        "credential-provider-chain",
+        "task-role",
+        "most-secure",
+        "environment-variables"
+      ],
+      "stem": "A developer migrates a Node.js service to {{t:Amazon ECS}} on {{t:AWS Fargate}}. The task definition specifies a task role that grants access to an {{t:Amazon DynamoDB}} table. The task definition also still sets the {{code:AWS_ACCESS_KEY_ID}} and {{code:AWS_SECRET_ACCESS_KEY}} environment variables that the previous deployment used, which belong to an {{t:IAM}} user whose permissions have since been removed. The service now receives {{code:AccessDeniedException}} errors even though the task role has the correct permissions. What should the developer do to resolve the errors in the MOST secure way?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Remove the {{code:AWS_ACCESS_KEY_ID}} and {{code:AWS_SECRET_ACCESS_KEY}} environment variables from the task definition.",
+          "correct": true,
+          "explanation": "The default credential provider chain checks environment variables before it checks the container credentials endpoint that serves the task role's temporary credentials. Because the variables are set, the SDK signs every request with the restricted {{t:IAM}} user's keys and never reaches the task role. Deleting the variables makes the SDK use the task role and removes the static key from the deployment entirely."
+        },
+        {
+          "id": "b",
+          "text": "Grant the {{t:IAM}} user the same {{t:DynamoDB}} permissions that the task role has.",
+          "correct": false,
+          "explanation": "This would stop the errors, but it keeps a long-lived access key inside the task definition, which is exactly what task roles exist to avoid, and it means the permissions must now be kept in sync in two places. It is the least secure way to make the error go away."
+        },
+        {
+          "id": "c",
+          "text": "In the application code, call {{code:AssumeRole}} on the task role's ARN at startup and build the {{t:DynamoDB}} client with the returned credentials.",
+          "correct": false,
+          "explanation": "The container credential provider already supplies and refreshes the task role's credentials, so an explicit {{code:AssumeRole}} is unnecessary. Worse, that {{t:STS}} call would itself be signed with the stale {{t:IAM}} user's keys, which would now also need {{code:sts:AssumeRole}} permission, and the developer would have to write credential refresh logic."
+        },
+        {
+          "id": "d",
+          "text": "Set the {{code:AWS_PROFILE}} environment variable in the task definition to a named profile that points at the task role so that the SDK prefers the role over the access keys.",
+          "correct": false,
+          "explanation": "Named profiles are read from the shared config and credentials files, which do not exist in this container image, and a profile cannot select the task role: the role is assigned by the task definition and served by the container credentials endpoint, which the provider chain reaches on its own once nothing earlier supplies credentials. How an SDK arbitrates between {{code:AWS_PROFILE}} and static key variables also differs by language, and either way the stale long-term key would still ship in the task definition, which fails the MOST secure requirement."
+        }
+      ],
+      "explanation": "Remember the order of the default credential provider chain: credentials passed in code, then environment variables, then the shared credentials and config files (including profiles, SSO and process providers), and only then the container credentials endpoint ({{t:ECS}} task role) or the instance metadata service ({{t:EC2}} {{t:instance profile}}). Stale {{code:AWS_ACCESS_KEY_ID}} and {{code:AWS_SECRET_ACCESS_KEY}} variables therefore silently override a task role. The fix is to delete the static credentials, not to widen their permissions.",
+      "references": [
+        {
+          "title": "AWS SDKs and Tools – credential provider chain",
+          "url": "https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html"
+        },
+        {
+          "title": "Amazon ECS task IAM role",
+          "url": "https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:78931013b23e86c3f4d1e188b8e1cf19a254a889b4c70233eda153526da77770"
+    },
+    {
+      "id": "dva-c03/iam-cognito/0003",
+      "revision": 1,
+      "changeKind": "cosmetic",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 2,
+      "domainId": "d2",
+      "taskId": "2.1",
+      "services": [
+        "iam",
+        "s3",
+        "lambda"
+      ],
+      "tags": [
+        "cross-account",
+        "policy-evaluation",
+        "resource-policy",
+        "permissions-boundary",
+        "most-secure"
+      ],
+      "stem": "A company has two AWS accounts. An {{t:AWS Lambda}} function in the Development account must read objects from an {{t:Amazon S3}} bucket that is owned by the Data account. The team that owns the bucket is willing to edit the bucket policy but will not create any {{t:IAM}} roles or users in the Data account. The function currently receives {{code:AccessDenied}} errors. Which combination of steps will allow the function to read the objects in the MOST secure way? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Create an {{t:IAM}} user in the Data account that has read access to the bucket, and store its access keys as environment variables of the function.",
+          "correct": false,
+          "explanation": "This would technically work, but it violates the bucket team's constraint and places long-term access keys in the function configuration. Cross-account {{t:S3}} access never requires static keys, so this is the least secure option."
+        },
+        {
+          "id": "b",
+          "text": "Add a statement to the bucket policy in the Data account that allows {{code:s3:GetObject}} (and {{code:s3:ListBucket}} if listing is needed) for the ARN of the function's execution role.",
+          "correct": true,
+          "explanation": "A resource-based policy in the account that owns the bucket is one of the two halves of cross-account access. It names the exact principal from the other account; without it the request is implicitly denied in the Data account no matter what the caller's own policies say."
+        },
+        {
+          "id": "c",
+          "text": "Attach a permissions boundary to the function's execution role that allows {{code:s3:GetObject}} on the bucket.",
+          "correct": false,
+          "explanation": "A permissions boundary only sets the maximum permissions that an identity-based policy can grant; it never grants anything on its own. Adding one here changes nothing and could even restrict the role further."
+        },
+        {
+          "id": "d",
+          "text": "Add an identity-based policy to the function's execution role in the Development account that allows {{code:s3:GetObject}} on the bucket's ARN.",
+          "correct": true,
+          "explanation": "For cross-account access the calling identity must also be allowed by its own account: both the identity-based policy of the principal and the resource-based policy of the resource must allow the action, and an explicit {{code:Deny}} in either one blocks it. The execution role's policy is the Development-account half."
+        },
+        {
+          "id": "e",
+          "text": "Have the function call {{code:AssumeRole}} on a role in the Data account that has read access to the bucket, and use the returned temporary credentials.",
+          "correct": false,
+          "explanation": "Assuming a role in the owning account is a valid and secure cross-account pattern in general, but the Data team has said it will not create roles, so this cannot be implemented here. When the owner can edit the resource policy, the bucket-policy plus identity-policy pair is sufficient."
+        }
+      ],
+      "explanation": "Same-account access needs only one {{code:Allow}}; cross-account access needs an {{code:Allow}} on both sides: the resource-based policy in the account that owns the resource and the identity-based policy of the principal that calls it (or, alternatively, the caller assumes a role inside the owning account, in which case that role's policies apply). An explicit {{code:Deny}} anywhere always wins, and permissions boundaries only limit, never grant. Static {{t:IAM}} user keys are never the answer when a role or a resource policy can do the job.",
+      "references": [
+        {
+          "title": "Cross-account policy evaluation logic",
+          "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic-cross-account.html"
+        },
+        {
+          "title": "Permissions boundaries for IAM entities",
+          "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html"
+        },
+        {
+          "title": "Example 2: Bucket owner granting cross-account bucket permissions",
+          "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-walkthroughs-managing-access-example2.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:5e1f047e3aaab501f8683d7d12cd53a8e6fe549c2a57d6bec468cc311df48dba"
+    },
+    {
+      "id": "dva-c03/iam-cognito/0004",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 3,
+      "domainId": "d2",
+      "taskId": "2.1",
+      "services": [
+        "cognito",
+        "dynamodb",
+        "iam"
+      ],
+      "tags": [
+        "identity-pool",
+        "fine-grained-access",
+        "leadingkeys",
+        "policy-variables",
+        "most-secure"
+      ],
+      "stem": "A developer is building a mobile notes application. Users sign in with an {{t:Amazon Cognito user pool}}, and the app reads and writes items directly in an {{t:Amazon DynamoDB}} table whose partition key identifies the owner of each note. The security team requires that a signed-in user can read or write only their own items and that AWS enforces this restriction rather than client-side code. Which solution meets these requirements in the MOST secure way?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Have the app send the {{t:user pool}} access token in the {{code:Authorization}} header of every {{t:DynamoDB}} request, and add a {{code:dynamodb:LeadingKeys}} condition to the {{t:user pool}} app client settings.",
+          "correct": false,
+          "explanation": "{{t:DynamoDB}}, like every AWS service API, accepts only {{t:SigV4}}-signed requests made with AWS credentials; it does not understand {{t:Cognito}} JWTs, and a {{t:user pool}} app client has no {{t:IAM}} conditions. A {{t:user pool}} authenticates users, but it cannot authorize calls to AWS services by itself."
+        },
+        {
+          "id": "b",
+          "text": "Create an {{t:Amazon Cognito identity pool}} that trusts the {{t:user pool}}, key the table by the identity ID, and attach a policy to the authenticated role that uses a {{code:dynamodb:Attributes}} condition listing every attribute that a user is allowed to read and write.",
+          "correct": false,
+          "explanation": "The {{t:identity pool}} part is right, but {{code:dynamodb:Attributes}} restricts which attributes (columns) a request can touch, not which items (rows). Every user would still be able to read and write other users' notes."
+        },
+        {
+          "id": "c",
+          "text": "Keep full-table access in the app and add a {{code:FilterExpression}} that matches the current user to every {{code:Query}} and {{code:Scan}} call.",
+          "correct": false,
+          "explanation": "A filter is part of the request that the client builds, so anyone who modifies the app or replays requests can simply leave it out. It does nothing for writes, and filtered items still consume read capacity. This is client-side enforcement, which the requirement rules out."
+        },
+        {
+          "id": "d",
+          "text": "Add an {{t:Amazon Cognito identity pool}} that trusts the {{t:user pool}}, key the table by the identity ID, and give the authenticated role a {{code:dynamodb:LeadingKeys}} condition that matches the {{code:cognito-identity.amazonaws.com:sub}} variable.",
+          "correct": true,
+          "explanation": "The {{t:identity pool}} exchanges the {{t:user pool}} ID token for temporary AWS credentials of the authenticated role. {{t:IAM}} then evaluates the {{code:dynamodb:LeadingKeys}} condition on every call and allows the request only when the partition key of each item equals the caller's identity ID, which is what the {{code:cognito-identity.amazonaws.com:sub}} policy variable resolves to. The check happens inside AWS and cannot be bypassed from the client."
+        }
+      ],
+      "explanation": "Row-level access to {{t:DynamoDB}} is an {{t:IAM}} feature: the {{code:dynamodb:LeadingKeys}} condition key compares the partition key of every item touched with a value from the request context, typically the {{code:cognito-identity.amazonaws.com:sub}} policy variable. That variable is the {{t:identity pool}} identity ID, not the {{t:user pool}} {{code:sub}} claim, so the table must be keyed by the identity ID. The {{t:user pool}} authenticates; only the {{t:identity pool}} turns a token into AWS credentials, and AWS service APIs never accept JWTs directly. {{code:dynamodb:Attributes}} is the column-level cousin and the classic distractor.",
+      "references": [
+        {
+          "title": "Using IAM policy conditions for fine-grained access control – DynamoDB",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/specifying-conditions.html"
+        },
+        {
+          "title": "IAM roles for identity pools",
+          "url": "https://docs.aws.amazon.com/cognito/latest/developerguide/iam-roles.html"
+        },
+        {
+          "title": "IAM policy elements: variables and tags",
+          "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:8499cc77de5be317382670a698d10009f9c25bc28a64bc9ac2ecf8fa32855957"
+    },
+    {
+      "id": "dva-c03/iam-cognito/0005",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 2,
+      "domainId": "d2",
+      "taskId": "2.1",
+      "services": [
+        "sts",
+        "iam",
+        "cloudwatch"
+      ],
+      "tags": [
+        "assumerole",
+        "external-id",
+        "confused-deputy",
+        "cross-account",
+        "most-secure"
+      ],
+      "stem": "A developer at a SaaS monitoring vendor is building a feature that reads {{t:Amazon CloudWatch}} metrics from each customer's AWS account. The vendor's application runs in the vendor's own account. Customers have asked how to grant this access without handing over long-term credentials, and the vendor's security team wants to be certain that one customer can never trick the vendor's application into reading another customer's metrics. Which combination of steps will meet these requirements in the MOST secure way? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Have each customer create an {{t:IAM}} role in their account whose trust policy names the vendor's account as the principal and requires a condition on {{code:sts:ExternalId}} with a unique value that the vendor generated for that customer.",
+          "correct": true,
+          "explanation": "A cross-account role trusted by the vendor's account is the standard way to grant third-party access without credentials. The {{code:sts:ExternalId}} condition in the trust policy means the role can be assumed only when the caller presents that customer's secret external ID, which is the designed defence against the confused-deputy problem."
+        },
+        {
+          "id": "b",
+          "text": "Have each customer create an {{t:IAM}} user with programmatic access and send its access keys to the vendor over an encrypted channel.",
+          "correct": false,
+          "explanation": "This hands the vendor long-term credentials that the customer must rotate and revoke by hand, which is exactly what the customers asked to avoid. Encrypting the transfer does not change the fact that a static key now lives in a third party's system."
+        },
+        {
+          "id": "c",
+          "text": "Have the vendor's application call {{code:GetSessionToken}} with an MFA code for each customer before it reads that customer's metrics.",
+          "correct": false,
+          "explanation": "{{code:GetSessionToken}} returns temporary credentials for the caller's own {{t:IAM}} user or root identity, typically to satisfy an MFA condition. It cannot grant access to a different account, so it is not a cross-account mechanism at all."
+        },
+        {
+          "id": "d",
+          "text": "Have each customer add an {{code:aws:SourceIp}} condition to the role's trust policy that lists the vendor's NAT gateway addresses.",
+          "correct": false,
+          "explanation": "An IP allow-list restricts where calls come from, but every customer would trust the same vendor address range, so it does nothing to stop one customer from pointing the vendor at another customer's role. It is also brittle when the vendor's addresses change."
+        },
+        {
+          "id": "e",
+          "text": "Have the vendor's application call {{code:AssumeRole}} with the customer's role ARN and that customer's {{code:ExternalId}}, and use the returned temporary credentials to call {{t:CloudWatch}}.",
+          "correct": true,
+          "explanation": "{{code:AssumeRole}} returns short-lived credentials (1 hour by default, up to the role's maximum session duration of 12 hours, but capped at 1 hour when the caller is itself running on role credentials, which counts as role chaining). {{t:STS}} rejects the call unless the {{code:ExternalId}} parameter matches the trust policy, so a customer cannot supply another customer's role ARN and have the vendor read data on their behalf."
+        }
+      ],
+      "explanation": "Third-party cross-account access means a role in the customer's account trusted by the vendor's account, plus {{code:AssumeRole}} from the vendor. The external ID is a shared secret that the vendor sends in every {{code:AssumeRole}} call and the customer pins in the trust policy's {{code:sts:ExternalId}} condition; it stops the confused-deputy attack in which customer A gives the vendor customer B's role ARN. {{code:GetSessionToken}} is only for MFA-protected sessions of your own identity and is never a cross-account tool.",
+      "references": [
+        {
+          "title": "Access to AWS accounts owned by third parties (external ID)",
+          "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html"
+        },
+        {
+          "title": "The confused deputy problem",
+          "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/confused-deputy.html"
+        },
+        {
+          "title": "AssumeRole – AWS STS API Reference",
+          "url": "https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html"
+        },
+        {
+          "title": "GetSessionToken – AWS STS API Reference",
+          "url": "https://docs.aws.amazon.com/STS/latest/APIReference/API_GetSessionToken.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:7da9211c0d6a3b2d95d6c0829b1063de32b0e13f60e9ede8e28b0bffd689db64"
+    },
+    {
+      "id": "dva-c03/iam-cognito/0006",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d2",
+      "taskId": "2.1",
+      "services": [
+        "cognito",
+        "s3",
+        "iam",
+        "sts"
+      ],
+      "tags": [
+        "user-pool-vs-identity-pool",
+        "id-token",
+        "temporary-credentials",
+        "s3-prefix",
+        "least-ops-overhead"
+      ],
+      "stem": "A developer is building a React single-page application in which users sign in through an {{t:Amazon Cognito user pool}}. After signing in, each user must be able to upload and download files directly to and from an {{t:Amazon S3}} bucket, but only under a prefix that belongs to that user. The application must never contain long-term AWS credentials. Which solution meets these requirements with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Attach an {{t:IAM}} role to a {{t:user pool}} group, add every user to the group, and have the {{t:user pool}} return AWS credentials for that role together with the JWTs at sign-in.",
+          "correct": false,
+          "explanation": "A {{t:user pool}} is an authentication service: it issues ID, access and refresh tokens and never issues AWS credentials. The role ARN on a {{t:user pool}} group is only consulted when an {{t:identity pool}} is configured to pick a role from the token's {{code:cognito:preferred_role}} claim, so on its own this does nothing."
+        },
+        {
+          "id": "b",
+          "text": "Add an {{t:Amazon Cognito identity pool}} that uses the {{t:user pool}} as a provider, exchange the ID token for temporary credentials, and scope the authenticated role's {{t:S3}} policy to a prefix that contains the {{code:cognito-identity.amazonaws.com:sub}} variable.",
+          "correct": true,
+          "explanation": "The {{t:identity pool}} is purpose-built for this exchange: the app passes the ID token in the logins map, receives short-lived credentials for the authenticated role, and the SDK refreshes them. A resource ARN and an {{code:s3:prefix}} condition that include the {{code:cognito-identity.amazonaws.com:sub}} policy variable give every user a private prefix with one policy and no custom code."
+        },
+        {
+          "id": "c",
+          "text": "Register the {{t:user pool}} as an OpenID Connect identity provider in {{t:IAM}}, create a role that trusts that provider, and have the browser code call {{code:AssumeRoleWithWebIdentity}} with the ID token to obtain credentials for a role that allows access to the bucket.",
+          "correct": false,
+          "explanation": "This works, because a {{t:user pool}} is a standards-compliant OIDC provider, but the developer must create and maintain the {{t:IAM}} OIDC provider, write trust policies with audience conditions, and implement credential refresh in the client. An {{t:identity pool}} does all of that, plus role mapping and unauthenticated access, out of the box, so this is more overhead."
+        },
+        {
+          "id": "d",
+          "text": "Embed an {{t:IAM}} user's access keys in the application's build-time configuration and use an {{t:S3}} bucket policy to restrict each user to their own prefix.",
+          "correct": false,
+          "explanation": "Keys in a JavaScript bundle are visible to anyone who opens the browser developer tools, which violates the requirement outright. A bucket policy also cannot tell app users apart because every request would arrive under the same {{t:IAM}} identity."
+        }
+      ],
+      "explanation": "User pools answer who are you and hand back ID, access and refresh tokens. Identity pools answer what may you do in AWS by trading one of those tokens for temporary, scoped credentials through an authenticated or unauthenticated role. Send the {{t:user pool}} ID token to the {{t:identity pool}}; the resulting credentials sign {{t:S3}} requests, and the {{code:cognito-identity.amazonaws.com:sub}} policy variable gives each user a private prefix. Calling {{code:AssumeRoleWithWebIdentity}} yourself works but re-implements what the {{t:identity pool}} already provides.",
+      "references": [
+        {
+          "title": "Amazon Cognito identity pools",
+          "url": "https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-identity.html"
+        },
+        {
+          "title": "Integrating user pools with identity pools",
+          "url": "https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-integrating-user-pools-with-identity-pools.html"
+        },
+        {
+          "title": "IAM roles for identity pools",
+          "url": "https://docs.aws.amazon.com/cognito/latest/developerguide/iam-roles.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:efde3ac59921861ecbd94d874f46619e013ae5f80deb4c9eb5e56565a36446bb"
+    },
+    {
+      "id": "dva-c03/iam-cognito/0007",
+      "revision": 1,
+      "changeKind": "cosmetic",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 1,
+      "domainId": "d2",
+      "taskId": "2.1",
+      "services": [
+        "cognito",
+        "api-gateway"
+      ],
+      "tags": [
+        "jwt",
+        "id-token-vs-access-token",
+        "cognito-authorizer",
+        "oauth-scopes",
+        "hosted-ui"
+      ],
+      "stem": "A developer builds a single-page application that signs users in through the {{t:hosted UI}} of an {{t:Amazon Cognito user pool}} with the authorization code grant. After sign-in, the application holds an ID token, an access token and a refresh token. The application calls an {{t:Amazon API Gateway}} REST API that uses a {{t:Cognito user pool authorizer}}, and every method is configured with the OAuth scope {{code:notes/read}} or {{code:notes/write}}. The application must also display the signed-in user's email address in its header. Which combination of actions should the developer take? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Send the refresh token in the {{code:Authorization}} header when calling the API so that the API can obtain fresh tokens if needed.",
+          "correct": false,
+          "explanation": "The refresh token is presented only to the {{t:user pool}} itself (the token endpoint or {{code:InitiateAuth}} with {{code:REFRESH_TOKEN_AUTH}}) to obtain new ID and access tokens. It is never sent to a resource server, and the authorizer would reject it with {{code:401 Unauthorized}}."
+        },
+        {
+          "id": "b",
+          "text": "Send the ID token in the {{code:Authorization}} header when calling the API.",
+          "correct": false,
+          "explanation": "When OAuth scopes are configured on a method, {{t:API Gateway}} treats the supplied token as an access token and checks its {{code:scope}} claim against the method's scopes. An ID token carries no {{code:scope}} claim, so the call fails with {{code:401 Unauthorized}}. The ID token is accepted only when no scopes are configured."
+        },
+        {
+          "id": "c",
+          "text": "Send the access token in the {{code:Authorization}} header when calling the API.",
+          "correct": true,
+          "explanation": "The access token is the OAuth 2.0 token meant for resource servers. It carries the {{code:scope}} claim (for example {{code:notes/read}}) and {{code:client_id}}; the authorizer validates its signature and expiry and then requires at least one of the method's scopes to appear in the token."
+        },
+        {
+          "id": "d",
+          "text": "Read the user's email address from the payload of the access token.",
+          "correct": false,
+          "explanation": "By default the access token contains {{code:sub}}, {{code:username}}, {{code:scope}}, {{code:client_id}} and {{code:cognito:groups}}, but no user profile attributes. Adding {{code:email}} would require a {{t:pre token generation}} {{t:Lambda}} trigger, which is extra work that the ID token makes unnecessary."
+        },
+        {
+          "id": "e",
+          "text": "Read the user's email address from the {{code:email}} claim in the payload of the ID token.",
+          "correct": true,
+          "explanation": "The ID token is the OpenID Connect identity token: it carries the user's attributes such as {{code:email}}, {{code:email_verified}} and {{code:cognito:username}}, and it exists precisely so the client can show who is signed in. The browser can decode the base64 payload directly."
+        }
+      ],
+      "explanation": "Three tokens, three jobs: the ID token proves identity and carries profile claims for your own UI; the access token authorizes calls to resource servers such as {{t:API Gateway}} and carries {{code:scope}}; the refresh token only ever goes back to {{t:Cognito}} to mint new tokens. Rule for the {{t:Cognito user pool authorizer}}: scopes configured on the method means send the access token; no scopes means the ID token is accepted. Sending the wrong token yields {{code:401 Unauthorized}}.",
+      "references": [
+        {
+          "title": "Using tokens with user pools",
+          "url": "https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-tokens-with-identity-providers.html"
+        },
+        {
+          "title": "Using the access token",
+          "url": "https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-the-access-token.html"
+        },
+        {
+          "title": "Integrate a REST API with an Amazon Cognito user pool",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-enable-cognito-user-pool.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:4b69c5c012ae1a5aa4d96ab5283ecd80c0fcf56a40fa183d0eb868db1d0b1bab"
+    },
+    {
+      "id": "dva-c03/iam-cognito/0008",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d2",
+      "taskId": "2.1",
+      "services": [
+        "api-gateway",
+        "lambda"
+      ],
+      "tags": [
+        "lambda-authorizer",
+        "authorizer-caching",
+        "iam-auth-vs-cognito-vs-lambda",
+        "most-efficient"
+      ],
+      "stem": "A developer exposes an {{t:Amazon API Gateway}} REST API to partner systems. Each partner authenticates with a bearer token that is issued and validated by the partner's own token service, which provides an HTTPS introspection endpoint. The introspection endpoint is slow and rate-limited, so the developer must validate every token but call the introspection endpoint as rarely as possible. The partners cannot be onboarded into an {{t:Amazon Cognito user pool}}. Which authorization approach meets these requirements MOST efficiently?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Enable {{code:AWS_IAM}} authorization on the methods and have each partner sign its requests with {{t:SigV4}} using credentials for an {{t:IAM}} role in the developer's account.",
+          "correct": false,
+          "explanation": "{{t:IAM}} authorization requires every partner to hold AWS credentials and sign requests, and it ignores the partner-issued bearer tokens entirely. It replaces the partners' existing identity scheme instead of validating it, so it does not meet the requirement."
+        },
+        {
+          "id": "b",
+          "text": "Configure a {{t:Cognito user pool authorizer}} on the methods and set its token source to the {{code:Authorization}} header.",
+          "correct": false,
+          "explanation": "A {{t:Cognito user pool authorizer}} can validate only JWTs issued by the configured {{t:user pool}}. It has no way to call a third-party introspection endpoint, and the partners cannot be moved into a {{t:user pool}}, so every request would be rejected."
+        },
+        {
+          "id": "c",
+          "text": "Require an API key in the {{code:x-api-key}} header, associate each partner's key with a usage plan, and validate the bearer token inside the backend integration on every request.",
+          "correct": false,
+          "explanation": "API keys identify a client for throttling and quotas; they are not an authentication mechanism. Validating the token in the backend means the slow introspection endpoint is hit on every single request, and unauthenticated calls still consume backend capacity, which is the opposite of efficient."
+        },
+        {
+          "id": "d",
+          "text": "Create a {{t:Lambda authorizer}} that calls the introspection endpoint, returns an {{t:IAM}} policy, and caches the result per token with a TTL of up to 3600 seconds.",
+          "correct": true,
+          "explanation": "A {{t:Lambda authorizer}} can validate any token format by calling out to the partner's service and returning an Allow or Deny policy. With authorization caching enabled, {{t:API Gateway}} stores that policy keyed on the token for the configured TTL (default 300 seconds, maximum 3600), so repeat calls with the same token skip both the {{t:Lambda}} function and the introspection endpoint, and rejected calls never reach the backend."
+        }
+      ],
+      "explanation": "Pick the authorizer by who issues the credential: AWS credentials mean {{code:AWS_IAM}} with {{t:SigV4}}; {{t:Cognito}} JWTs mean the {{t:Cognito user pool authorizer}}; anything else (opaque tokens, third-party JWTs, custom headers or request parameters) means a {{t:Lambda authorizer}}. A {{t:Lambda authorizer}} result can be cached for {{code:authorizerResultTtlInSeconds}} (0 to 3600, default 300) keyed on the identity source, which is how you avoid calling an expensive validation backend on every request. API keys never authenticate; they meter.",
+      "references": [
+        {
+          "title": "Use API Gateway Lambda authorizers",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-use-lambda-authorizer.html"
+        },
+        {
+          "title": "Controlling and managing access to a REST API in API Gateway",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-control-access-to-api.html"
+        },
+        {
+          "title": "Usage plans and API keys for REST APIs",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-api-usage-plans.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:779d18290194285f74364188ade279dda9fdcf19892e33679e937fd4c9994c47"
+    },
+    {
+      "id": "dva-c03/iam-cognito/0009",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 3,
+      "domainId": "d2",
+      "taskId": "2.1",
+      "services": [
+        "s3",
+        "lambda",
+        "sts"
+      ],
+      "tags": [
+        "presigned-url",
+        "temporary-credentials",
+        "expiry",
+        "root-cause"
+      ],
+      "stem": "A developer writes an {{t:AWS Lambda}} function that generates an {{t:Amazon S3}} {{t:presigned URL}} for each large report so that customers can download it without any AWS credentials. The function uses the {{t:AWS SDK}} and requests an expiration of 7 days (604800 seconds). Customers report that a link works when they first open it, but when they return the next day the same link fails with an error response whose error code is {{code:ExpiredToken}}, even though 7 days have not passed. What is the cause of this behavior?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "The maximum validity of a {{t:presigned URL}} is 12 hours, so the SDK silently capped the expiration that the developer requested to 12 hours from the moment of signing.",
+          "correct": false,
+          "explanation": "12 hours is the limit when a {{t:presigned URL}} is created in the {{t:S3}} console. With the SDK or CLI and {{t:SigV4}}, a {{t:presigned URL}} can be valid for up to 7 days (604800 seconds), and nothing trims the value you pass: if {{code:X-Amz-Expires}} exceeds the limit, {{t:S3}} rejects the request with an error instead of shortening it."
+        },
+        {
+          "id": "b",
+          "text": "The function signed the URL with its execution role's temporary credentials, and a {{t:presigned URL}} stops working as soon as the credentials that signed it expire.",
+          "correct": true,
+          "explanation": "A {{t:presigned URL}} is a {{t:SigV4}} signature plus the signer's credentials, including the session token when the signer uses temporary credentials. {{t:S3}} validates those credentials on every request, so the URL dies at the earlier of its requested expiry and the signing session's expiry. A {{t:Lambda}} execution role issues short-lived session credentials, which is why the links last hours rather than days."
+        },
+        {
+          "id": "c",
+          "text": "{{t:S3 Block Public Access}} is enabled on the bucket, which blocks downloads through a {{t:presigned URL}} once the object is no longer cached by the SDK.",
+          "correct": false,
+          "explanation": "A {{t:presigned URL}} is an authenticated request made on behalf of the signer, not public access, so Block Public Access does not affect it. The SDK also does not cache objects; this option describes mechanisms that do not exist."
+        },
+        {
+          "id": "d",
+          "text": "The function's execution role lacks {{code:s3:GetObject}}, so {{t:S3}} accepted the signature but rejected the download after the first request.",
+          "correct": false,
+          "explanation": "Permissions are evaluated on every request, so a missing {{code:s3:GetObject}} would have failed the very first download with {{code:AccessDenied}}, not an {{code:ExpiredToken}} error the next day. The signer's permissions bound what the URL can do, but they do not explain a delayed failure."
+        }
+      ],
+      "explanation": "A {{t:presigned URL}} is only as powerful and as long-lived as the credentials that signed it: whoever opens it acts as the signer, so the signer must hold the permission, and the URL expires at the earlier of {{code:X-Amz-Expires}} (at most 7 days with {{t:SigV4}}) and the signing credentials' own expiry. Temporary credentials from a {{t:Lambda}} execution role, an {{t:instance profile}} or an assumed role therefore produce URLs that last hours, not days. For multi-day links, sign with long-term {{t:IAM}} user credentials kept in a secret store and rotated, or issue short-lived URLs on demand.",
+      "references": [
+        {
+          "title": "Sharing objects with presigned URLs",
+          "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/ShareObjectPreSignedURL.html"
+        },
+        {
+          "title": "Download and upload objects with presigned URLs",
+          "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:fbc40ede1dfe589616624764cc85cd3c45608a5650d0808e7bbe3b27da71febf"
+    },
+    {
+      "id": "dva-c03/iam-cognito/0010",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d2",
+      "taskId": "2.1",
+      "services": [
+        "api-gateway",
+        "iam"
+      ],
+      "tags": [
+        "sigv4",
+        "iam-auth",
+        "execute-api-invoke",
+        "missing-authentication-token",
+        "least-ops-overhead"
+      ],
+      "stem": "A developer writes a nightly Python script that runs on an {{t:Amazon EC2}} instance and calls an internal {{t:Amazon API Gateway}} REST API whose methods use {{code:AWS_IAM}} authorization. When the script sends a plain HTTPS request with the {{code:requests}} library, {{t:API Gateway}} returns {{code:403 Forbidden}} with the message {{code:Missing Authentication Token}}. The instance already has an {{t:instance profile}}. What should the developer do so that the script can call the API with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Create an API key, attach it to a usage plan for the API, and send the key in the {{code:x-api-key}} header of every request.",
+          "correct": false,
+          "explanation": "API keys are for metering and throttling through usage plans; they do not authenticate a caller. A method that uses {{code:AWS_IAM}} authorization still requires a {{t:SigV4}}-signed request, so the 403 would remain exactly as it is."
+        },
+        {
+          "id": "b",
+          "text": "Put the ARN of the instance role in the {{code:Authorization}} header so that {{t:API Gateway}} can look up the role's permissions.",
+          "correct": false,
+          "explanation": "{{t:API Gateway}} cannot verify an unsigned ARN; anyone could send any ARN. With {{t:IAM}} authorization the {{code:Authorization}} header must carry a {{t:SigV4}} signature that was computed with the caller's secret key, which proves possession of the credentials."
+        },
+        {
+          "id": "c",
+          "text": "Sign each request with {{t:Signature Version 4 (SigV4)}} using the credentials of the {{t:instance profile}} (for example with botocore's {{code:SigV4Auth}}), and grant the instance role {{code:execute-api:Invoke}} on the API.",
+          "correct": true,
+          "explanation": "{{t:IAM}} authorization means the caller is an {{t:IAM}} principal that signs the request with {{t:SigV4}} and is allowed {{code:execute-api:Invoke}} on the API's resource ARN. The {{t:instance profile}} already supplies rotating credentials through the credential provider chain, so the only work is to sign the request with the SDK's signer and add one policy statement, with no new credentials to manage."
+        },
+        {
+          "id": "d",
+          "text": "Create an {{t:IAM}} user for the script, store its access keys in the {{code:~/.aws/credentials}} file on the instance, and switch the methods from {{code:AWS_IAM}} to a {{t:Lambda authorizer}} that validates the access key ID sent in a custom header.",
+          "correct": false,
+          "explanation": "This introduces long-lived keys on the instance, custom authorizer code to write and maintain, and a weaker check than {{t:SigV4}} (an access key ID is not a secret). It is far more overhead and less secure than using the role the instance already has."
+        }
+      ],
+      "explanation": "{{t:IAM}} authorization on {{t:API Gateway}} means the caller must be an {{t:IAM}} principal that signs the HTTP request with {{t:SigV4}} and is allowed {{code:execute-api:Invoke}} on the {{code:arn:aws:execute-api:region:account-id:api-id/stage/METHOD/path}} resource. An unsigned request produces {{code:403 Missing Authentication Token}}; a wrongly signed one produces a different 403 signature-mismatch message. Reuse the compute's role credentials ({{t:instance profile}}) through the SDK's signer instead of creating keys, and remember that API keys belong to usage plans, not authentication.",
+      "references": [
+        {
+          "title": "Control access to a REST API with IAM permissions",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/permissions.html"
+        },
+        {
+          "title": "Control access for invoking an API",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-control-access-using-iam-policies-to-invoke-api.html"
+        },
+        {
+          "title": "AWS Signature Version 4 for API requests",
+          "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_aws-signing.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:c5d1c73663ee6ef17694323feff56a3a3892368c78ed249b66af2d37ebdc1260"
+    }
+  ]
+}

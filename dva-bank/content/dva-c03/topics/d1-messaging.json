@@ -1,0 +1,755 @@
+{
+  "schemaVersion": 1,
+  "courseId": "dva-c03",
+  "sectionId": "messaging",
+  "title": "SQS, SNS, EventBridge, Kinesis and Step Functions",
+  "questions": [
+    {
+      "id": "dva-c03/messaging/0001",
+      "revision": 1,
+      "changeKind": "cosmetic",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 1,
+      "domainId": "d1",
+      "taskId": "1.1",
+      "services": [
+        "sqs"
+      ],
+      "tags": [
+        "fifo",
+        "ordering",
+        "deduplication"
+      ],
+      "stem": "A developer is moving an order-event producer from an {{t:Amazon SQS}} standard queue to a new {{t:SQS}} FIFO queue. Events for the same customer must be processed in the order in which they were sent, and a producer retry after a network timeout must not create a second copy of the same event in the queue. The first {{code:SendMessage}} call to the new queue fails with a {{code:MissingParameter}} error. Which combination of changes to the producer must the developer make to meet these requirements? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Set {{code:MessageGroupId}} to the customer ID on every {{code:SendMessage}} call.",
+          "correct": true,
+          "explanation": "FIFO queues require {{code:MessageGroupId}} on every message; SQS guarantees strict ordering only within a message group, so using the customer ID keeps each customer's events in order while different customers can be processed in parallel. Omitting it is what produces the {{code:MissingParameter}} error."
+        },
+        {
+          "id": "b",
+          "text": "Set a per-message {{code:DelaySeconds}} value so that messages for the same customer are spaced at least one second apart and arrive in sequence.",
+          "correct": false,
+          "explanation": "FIFO queues do not support per-message timers (only a queue-level delay), and spacing messages out does nothing to guarantee order or prevent duplicates; ordering comes from the message group, not from timing."
+        },
+        {
+          "id": "c",
+          "text": "Provide a unique {{code:MessageDeduplicationId}} (for example the order event ID) on each call, or enable {{code:ContentBasedDeduplication}} on the queue.",
+          "correct": true,
+          "explanation": "A FIFO queue rejects a second message with the same deduplication ID within the 5-minute deduplication interval, so a retried {{code:SendMessage}} does not enqueue a duplicate. With {{code:ContentBasedDeduplication}} SQS derives the ID from a SHA-256 hash of the message body instead."
+        },
+        {
+          "id": "d",
+          "text": "Set the {{code:SequenceNumber}} attribute to an incrementing counter on each call so that SQS knows the delivery order of the customer's events.",
+          "correct": false,
+          "explanation": "{{code:SequenceNumber}} is assigned by SQS and returned in the {{code:SendMessage}} response; it cannot be set by the producer. Order is determined by arrival within a message group, not by a client-supplied counter."
+        },
+        {
+          "id": "e",
+          "text": "Keep the existing {{code:SendMessage}} calls unchanged and rely on the {{code:.fifo}} suffix of the queue name to enable ordering and deduplication automatically.",
+          "correct": false,
+          "explanation": "The {{code:.fifo}} suffix is required for a FIFO queue, but it does not change the API contract: every send still needs a {{code:MessageGroupId}}, and deduplication needs either a deduplication ID or content-based deduplication, which is exactly why the call is failing."
+        }
+      ],
+      "explanation": "FIFO queues need two things from the producer: {{code:MessageGroupId}} (the ordering scope, mandatory) and a deduplication ID (an explicit {{code:MessageDeduplicationId}} or {{code:ContentBasedDeduplication}} on the queue), which suppresses duplicates for 5 minutes. Remember the throughput trade-off: 300 API calls per second per action, or 3,000 messages per second with batches of 10; high throughput mode raises this further by partitioning on message group ID, so use many distinct group IDs. Standard queues give at-least-once delivery and best-effort ordering with nearly unlimited throughput.",
+      "references": [
+        {
+          "title": "Amazon SQS – Using the message group ID",
+          "url": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/using-messagegroupid-property.html"
+        },
+        {
+          "title": "Amazon SQS – Using the message deduplication ID",
+          "url": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/using-messagededuplicationid-property.html"
+        },
+        {
+          "title": "Amazon SQS – High throughput for FIFO queues",
+          "url": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/high-throughput-fifo.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:30a8efdc110f91198f9707f794a21da3b0b9c1729c24060735afa539fbbe4e62"
+    },
+    {
+      "id": "dva-c03/messaging/0002",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.1",
+      "services": [
+        "sqs",
+        "lambda"
+      ],
+      "tags": [
+        "visibility-timeout",
+        "lambda-esm",
+        "dlq",
+        "limits"
+      ],
+      "stem": "An {{t:AWS Lambda}} function processes messages from an {{t:Amazon SQS}} standard queue through an event source mapping with a batch size of 10. The function timeout is 3 minutes, the queue uses the default visibility timeout, and a redrive policy moves messages to a {{t:dead-letter queue}} after three receives. Operators report that many messages are processed two or three times and that some end up in the dead-letter queue even though {{t:Amazon CloudWatch Logs}} shows the function completed them successfully. Which change will MOST likely resolve the problem?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Increase {{code:maxReceiveCount}} in the redrive policy from 3 to 10 so that messages are given more chances before they are moved to the dead-letter queue.",
+          "correct": false,
+          "explanation": "Raising the receive count only delays when a message reaches the dead-letter queue; the message is still becoming visible again while the function is working on it, so the duplicate processing continues unchanged."
+        },
+        {
+          "id": "b",
+          "text": "Increase the function timeout to 15 minutes so that each batch has more time to finish before Lambda stops the invocation.",
+          "correct": false,
+          "explanation": "The problem is the gap between the 30-second visibility timeout and the running function; a longer function timeout widens that gap, so messages reappear and are re-delivered even more often."
+        },
+        {
+          "id": "c",
+          "text": "Set the queue's visibility timeout to at least 18 minutes, which is six times the function timeout.",
+          "correct": true,
+          "explanation": "Lambda deletes a message only after the function returns successfully. With the default 30-second visibility timeout, a batch that takes longer than 30 seconds becomes visible again and is received by another invocation, which counts as another receive. AWS recommends a visibility timeout of at least six times the function timeout (plus any batching window) so that a retry never overlaps with an in-flight invocation."
+        },
+        {
+          "id": "d",
+          "text": "Have the function call {{code:DeleteMessage}} on each record as soon as it starts processing it so that no other invocation can receive the same record.",
+          "correct": false,
+          "explanation": "Deleting before processing turns the pipeline into at-most-once: any failure after the delete loses the message. Lambda already deletes successfully processed messages; the fix belongs in the visibility timeout, not in early deletion."
+        }
+      ],
+      "explanation": "The visibility timeout (default 30 seconds, maximum 12 hours) is how long a received message stays hidden from other consumers; if processing outlasts it, the message is re-delivered and each delivery counts toward {{code:maxReceiveCount}}. For Lambda event source mappings, set the queue visibility timeout to at least six times the function timeout. Custom consumers can extend a single message's timeout with {{code:ChangeMessageVisibility}}, but Lambda-managed polling relies on the queue attribute.",
+      "references": [
+        {
+          "title": "Amazon SQS visibility timeout",
+          "url": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html"
+        },
+        {
+          "title": "Using Lambda with Amazon SQS",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/with-sqs.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:68a5807728241cc619f6b5e56a947a0b0e4c30df8021ab89ef286a4d132670bb"
+    },
+    {
+      "id": "dva-c03/messaging/0003",
+      "revision": 1,
+      "changeKind": "cosmetic",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 1,
+      "domainId": "d1",
+      "taskId": "1.1",
+      "services": [
+        "sqs",
+        "ecs"
+      ],
+      "tags": [
+        "long-polling",
+        "cost-optimization",
+        "batching"
+      ],
+      "stem": "A developer runs a fleet of {{t:Amazon ECS}} tasks that call {{code:ReceiveMessage}} on an {{t:Amazon SQS}} standard queue in a tight loop. Traffic arrives in bursts, and for most of the day the queue is empty. The {{code:NumberOfEmptyReceives}} metric is very high and SQS request charges have become the largest line item on the team's bill. Which combination of changes is the MOST cost-effective way to reduce the number of requests? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Set a queue-level {{code:DelaySeconds}} of 60 seconds so that new messages accumulate before the consumers can see them.",
+          "correct": false,
+          "explanation": "A delay queue hides new messages for the delay period, which adds latency but does not stop the consumers from polling and receiving empty responses while they wait."
+        },
+        {
+          "id": "b",
+          "text": "Set {{code:ReceiveMessageWaitTimeSeconds}} on the queue (or {{code:WaitTimeSeconds}} on each call) to 20 seconds to enable long polling.",
+          "correct": true,
+          "explanation": "With long polling, SQS queries all of its servers and holds the connection until a message arrives or the wait time (up to 20 seconds) elapses, so an idle consumer makes at most three requests per minute instead of hundreds, and empty responses nearly disappear."
+        },
+        {
+          "id": "c",
+          "text": "Convert the queue to a FIFO queue so that consumers receive messages in ordered batches.",
+          "correct": false,
+          "explanation": "Queue type has no effect on empty receives or on per-request billing; a FIFO queue would also cap throughput at 300 API calls per second per action and require producer changes."
+        },
+        {
+          "id": "d",
+          "text": "Reduce the visibility timeout to 5 seconds so that unprocessed messages are returned to the queue faster.",
+          "correct": false,
+          "explanation": "The visibility timeout only controls how long a received message is hidden; shortening it increases duplicate deliveries during processing and does nothing about empty polls."
+        },
+        {
+          "id": "e",
+          "text": "Request up to 10 messages per call by setting {{code:MaxNumberOfMessages}} to 10.",
+          "correct": true,
+          "explanation": "When messages are available, retrieving up to 10 per request cuts the number of {{code:ReceiveMessage}} (and batched {{code:DeleteMessageBatch}}) calls by up to 10x; SQS bills each 64 KB of payload as one request, so a batch of ten small messages costs the same as a single message."
+        },
+        {
+          "id": "f",
+          "text": "Add more ECS tasks so that each individual task polls the queue less often.",
+          "correct": false,
+          "explanation": "More consumers polling an empty queue multiply the empty receives; the total number of requests, not the number of workers, drives SQS cost."
+        }
+      ],
+      "explanation": "Short polling (the default, {{code:WaitTimeSeconds}} of 0) samples a subset of SQS servers and returns immediately, often empty; long polling (up to 20 seconds) waits for messages and checks all servers, reducing both empty responses and false empties. Combine long polling with batch operations ({{code:MaxNumberOfMessages}} up to 10, {{code:SendMessageBatch}}, {{code:DeleteMessageBatch}}) to minimise the request count, which is what SQS bills. Delay queues and the visibility timeout control when messages are visible, not how often consumers poll.",
+      "references": [
+        {
+          "title": "Amazon SQS short and long polling",
+          "url": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-short-and-long-polling.html"
+        },
+        {
+          "title": "Amazon SQS pricing",
+          "url": "https://aws.amazon.com/sqs/pricing/"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:12eee2873098dc2b7ac5e4c752827c3677cb2fd5460fc26f01e363fd9f1c7eb0"
+    },
+    {
+      "id": "dva-c03/messaging/0004",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.1",
+      "services": [
+        "sqs",
+        "s3"
+      ],
+      "tags": [
+        "message-size",
+        "extended-client-library",
+        "limits"
+      ],
+      "stem": "A document-processing application places scanned PDF files, encoded as base64, into {{t:Amazon SQS}} messages for a fleet of workers. The PDFs range from 2 MB to 8 MB, and every {{code:SendMessage}} call for them is rejected because the message exceeds the queue's maximum size. The team wants to keep SQS as the work queue. Which solution will allow the application to handle these payloads with the FEWEST code changes?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Set the queue's {{code:MaximumMessageSize}} attribute to 8 MB so that the queue accepts the larger messages.",
+          "correct": false,
+          "explanation": "{{code:MaximumMessageSize}} accepts values from 1 KiB up to the service maximum of 1 MiB, which is also its default (the ceiling was 256 KiB until 2025); the attribute can only lower the limit, never raise it to 8 MB, so the sends would still fail."
+        },
+        {
+          "id": "b",
+          "text": "Use the {{t:Amazon SQS Extended Client Library}} so that the payload is stored in an {{t:Amazon S3}} bucket and the message carries a reference to the object.",
+          "correct": true,
+          "explanation": "The Extended Client Library (available for Java and Python) wraps the normal SQS client: on send it uploads payloads above a threshold to S3 and puts a pointer in the message; on receive it transparently downloads the object, so producer and consumer code keep their existing {{code:SendMessage}} and {{code:ReceiveMessage}} calls. Payloads up to 2 GB are supported."
+        },
+        {
+          "id": "c",
+          "text": "Split each PDF into chunks smaller than the queue limit, send each chunk as a separate message with a sequence attribute, and reassemble the chunks in the worker before processing.",
+          "correct": false,
+          "explanation": "This can work, but it requires chunking, sequencing and reassembly logic on both sides, and a standard queue does not guarantee that chunks arrive together or in order, which is far more code than using the library."
+        },
+        {
+          "id": "d",
+          "text": "Publish the PDFs to an {{t:Amazon Kinesis Data Streams}} stream instead of the queue and have the workers consume from the stream.",
+          "correct": false,
+          "explanation": "A Kinesis record is limited to 1 MB of data, so the same payloads would be rejected, and the consumers would have to be rewritten for shard-based consumption and checkpointing."
+        }
+      ],
+      "explanation": "An SQS message can be at most 1 MiB (the ceiling was 256 KiB until August 2025); the {{code:MaximumMessageSize}} queue attribute can be set anywhere between 1 KiB and 1 MiB, which is now its default, but never higher. For anything larger, the {{t:Amazon SQS Extended Client Library}} stores the body in S3 and sends a pointer, with no change to the producer and consumer flow. Keep the S3 objects at least as long as messages can live in the queue (retention is 4 days by default and up to 14 days) so that a late consumer can still fetch the payload.",
+      "references": [
+        {
+          "title": "Managing large Amazon SQS messages using Amazon S3",
+          "url": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-s3-messages.html"
+        },
+        {
+          "title": "Amazon SQS message quotas",
+          "url": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-quotas.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:1bc817a756a85b2f42be9b7cbf8a94a067582b2e0cf10ab1b56112c6d1d2164a"
+    },
+    {
+      "id": "dva-c03/messaging/0005",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.1",
+      "services": [
+        "sns",
+        "sqs"
+      ],
+      "tags": [
+        "fan-out",
+        "message-filtering",
+        "fifo"
+      ],
+      "stem": "An e-commerce platform publishes order events to an {{t:Amazon SNS}} topic and sets a message attribute named {{code:eventType}} to {{code:ORDER_CREATED}}, {{code:ORDER_PAID}} or {{code:ORDER_SHIPPED}}. The billing service must receive only {{code:ORDER_PAID}} events and the shipping service only {{code:ORDER_SHIPPED}} events, and each service consumes from its own {{t:Amazon SQS}} queue. For a given order, each service must receive its events in the order in which they were published. Which solution meets these requirements with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Keep a standard topic subscribed to two standard queues. Have each consumer discard the event types it does not need and reorder events by using a timestamp in the message body.",
+          "correct": false,
+          "explanation": "This delivers and bills every event to every queue and pushes filtering and reordering into application code; standard topics and queues offer only best-effort ordering, so the reorder logic must handle out-of-order arrivals indefinitely."
+        },
+        {
+          "id": "b",
+          "text": "Create a single SQS FIFO queue, subscribe it to the topic, and have both the billing service and the shipping service poll that one queue.",
+          "correct": false,
+          "explanation": "A queue is a point-to-point channel: each message is consumed by one consumer, so the two services would take each other's messages rather than each receiving a copy. Fan-out requires one queue per subscriber."
+        },
+        {
+          "id": "c",
+          "text": "Keep the standard topic, add a filter policy on {{code:eventType}} to each subscription, and subscribe one SQS FIFO queue per service so that the queues preserve order.",
+          "correct": false,
+          "explanation": "Filtering at the subscription is right, but a standard topic provides only best-effort ordering and its {{code:Publish}} call carries no {{code:MessageGroupId}}, so events can reach the queue out of sequence and a FIFO queue would faithfully preserve that wrong order; end-to-end ordering needs a FIFO topic publishing with a message group ID into FIFO queues."
+        },
+        {
+          "id": "d",
+          "text": "Create an SNS FIFO topic, publish with {{code:MessageGroupId}} set to the order ID, subscribe one SQS FIFO queue per service, and attach a filter policy on {{code:eventType}} to each subscription.",
+          "correct": true,
+          "explanation": "An SNS FIFO topic preserves order within a message group and deduplicates messages, delivering both guarantees to SQS FIFO queues; a filter policy on each subscription makes SNS deliver only matching events, so each queue holds exactly what its consumer needs with no custom filtering code."
+        }
+      ],
+      "explanation": "Fan-out is SNS plus one queue per consumer; filter at the subscription (filter policies match message attributes by default, or the body with {{code:FilterPolicyScope}}) so that each queue receives only relevant messages and you are not billed for, or forced to discard, the rest. When order matters end to end, pair an SNS FIFO topic with SQS FIFO queues and set {{code:MessageGroupId}} on publish. Enable raw message delivery on the subscription if the consumer should receive the original payload without the SNS JSON envelope.",
+      "references": [
+        {
+          "title": "Amazon SNS message filtering",
+          "url": "https://docs.aws.amazon.com/sns/latest/dg/sns-message-filtering.html"
+        },
+        {
+          "title": "Amazon SNS FIFO topics",
+          "url": "https://docs.aws.amazon.com/sns/latest/dg/sns-fifo-topics.html"
+        },
+        {
+          "title": "Amazon SNS raw message delivery",
+          "url": "https://docs.aws.amazon.com/sns/latest/dg/sns-large-payload-raw-message-delivery.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:08284acea9bc1c4c91fa69af0693b0b832f7f1be67c7392aaa3a3d00aae76f38"
+    },
+    {
+      "id": "dva-c03/messaging/0006",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 3,
+      "domainId": "d1",
+      "taskId": "1.1",
+      "services": [
+        "eventbridge",
+        "sns",
+        "kinesis",
+        "sqs"
+      ],
+      "tags": [
+        "service-selection",
+        "event-routing",
+        "archive-replay",
+        "schema-registry"
+      ],
+      "stem": "A company's microservices emit domain events such as {{code:CustomerUpgraded}} and {{code:InvoicePaid}}. A developer must route each event to different targets based on fields inside the event body, ingest support-ticket events from a third-party SaaS help-desk provider that has a native AWS integration, generate typed code bindings from the event structures, and retain a copy of every event so that a consumer added next quarter can be back-filled with historical events. Which solution meets these requirements with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Use a custom {{t:Amazon EventBridge}} event bus with event-pattern rules, a partner event source for the SaaS provider, schema discovery in the {{t:EventBridge schema registry}}, and an event archive for replay.",
+          "correct": true,
+          "explanation": "EventBridge covers each requirement natively: content-based routing with event patterns on any field, SaaS partner event sources that deliver straight to a partner event bus, a schema registry with discovery and code bindings, and archive and replay to re-send past events to a new rule or target, all without custom code."
+        },
+        {
+          "id": "b",
+          "text": "Publish events to an {{t:Amazon SNS}} topic with a subscription filter policy per target, add an {{t:Amazon Data Firehose}} subscription that stores every event in {{t:Amazon S3}}, and write an {{t:AWS Lambda}} function that polls the SaaS provider's API on a schedule.",
+          "correct": false,
+          "explanation": "This is workable, but it stitches together several components: filtering is limited to filter-policy syntax, the SaaS integration is custom polling code, and back-filling a new consumer means writing a job to read S3 and republish, because a standard SNS topic has no archive or replay capability."
+        },
+        {
+          "id": "c",
+          "text": "Write events to an {{t:Amazon Kinesis Data Streams}} stream with 365-day retention, have each consumer read the whole stream and ignore the events it does not need, and run a Lambda poller for the SaaS provider.",
+          "correct": false,
+          "explanation": "A stream can be replayed by any consumer, but routing becomes per-consumer filtering code, there is no schema registry or native SaaS ingestion, and a year of retained shards costs more to run than an EventBridge archive."
+        },
+        {
+          "id": "d",
+          "text": "Create one {{t:Amazon SQS}} queue per target and a Lambda router function that inspects each event and forwards it to the right queues, and store a copy of each event in {{t:Amazon DynamoDB}} for later replay.",
+          "correct": false,
+          "explanation": "The router, the SaaS integration and the replay tooling are all custom code to build and operate, and queue-per-target routing has to be updated every time a new consumer appears."
+        }
+      ],
+      "explanation": "Choose EventBridge when the problem is event routing: content-based rules, SaaS partner and cross-account sources, scheduled rules, a schema registry and archive/replay are built in. Choose SNS for simple fan-out to many subscribers, SQS for decoupled point-to-point work queues, and Kinesis Data Streams when you need ordered, high-throughput streaming that multiple consumers read independently with replay from the stream itself. The replay requirement plus native SaaS ingestion is what separates EventBridge from the SNS design here.",
+      "references": [
+        {
+          "title": "What is Amazon EventBridge?",
+          "url": "https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-what-is.html"
+        },
+        {
+          "title": "Amazon EventBridge schemas",
+          "url": "https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-schema.html"
+        },
+        {
+          "title": "Receiving events from a SaaS partner with Amazon EventBridge",
+          "url": "https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-saas.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:4174eb4fae0a3ef7c4e27a586e8008e028e5e4dedafdecde3deb39739f91e398"
+    },
+    {
+      "id": "dva-c03/messaging/0007",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.1",
+      "services": [
+        "kinesis"
+      ],
+      "tags": [
+        "hot-shard",
+        "partition-key",
+        "throttling",
+        "limits"
+      ],
+      "stem": "A clickstream application writes events to an {{t:Amazon Kinesis Data Streams}} stream with 10 shards in provisioned mode, using the tenant ID as the partition key. Events from a single user session must stay in order, and two separate consumer applications read the stream with sub-second latency and sometimes reprocess the previous 24 hours. One tenant generates about 60% of all traffic. During peak hours, {{code:PutRecords}} calls for that tenant return {{code:ProvisionedThroughputExceededException}}, although the stream's total ingress is below half of its provisioned capacity. Which change will MOST effectively resolve the throttling while preserving the ordering requirement?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Double the number of shards in the stream by calling {{code:UpdateShardCount}} so that the stream has more write capacity.",
+          "correct": false,
+          "explanation": "A partition key hashes to exactly one shard regardless of how many shards exist, so all of the large tenant's records would still land on a single shard that is limited to 1 MiB or 1,000 records per second; more shards only add idle capacity and cost."
+        },
+        {
+          "id": "b",
+          "text": "Register both consumer applications as {{t:enhanced fan-out}} consumers of the stream so that each has dedicated throughput.",
+          "correct": false,
+          "explanation": "Enhanced fan-out gives each consumer its own 2 MiB per second of read throughput per shard through {{code:SubscribeToShard}}; it does nothing for write-side throttling experienced by the producer."
+        },
+        {
+          "id": "c",
+          "text": "Change the partition key to the session ID so that the tenant's records are distributed across all of the shards.",
+          "correct": true,
+          "explanation": "Write capacity is enforced per shard, so a hot partition key saturates one shard while the others sit idle. Keying on the session ID keeps every session's events on one shard (preserving per-session order) while spreading the large tenant's many sessions across the whole stream."
+        },
+        {
+          "id": "d",
+          "text": "Replace the stream with an {{t:Amazon Data Firehose}} delivery stream that writes the events to {{t:Amazon S3}} and have the consumers read from the bucket.",
+          "correct": false,
+          "explanation": "Firehose buffers and delivers data to destinations in near real time without consumer-side ordering, multiple independent consumers or replay from the stream, so it cannot serve the two low-latency consumers or the 24-hour reprocessing."
+        }
+      ],
+      "explanation": "Each Kinesis shard accepts 1 MiB or 1,000 records per second and serves 2 MiB per second of reads (shared, or per consumer with enhanced fan-out). Because a partition key always maps to one shard, {{code:ProvisionedThroughputExceededException}} on a stream that is not full means a hot key, and the fix is a higher-cardinality key (or a random suffix when ordering is not needed), not more shards; the SDK's exponential backoff only smooths short bursts. Use Kinesis Data Streams for ordered, replayable streams with multiple consumers (the {{t:Kinesis Client Library}} handles shard leases and checkpoints), and Firehose when you only need buffered delivery to S3, Redshift, OpenSearch or an HTTP endpoint.",
+      "references": [
+        {
+          "title": "Amazon Kinesis Data Streams quotas and limits",
+          "url": "https://docs.aws.amazon.com/streams/latest/dev/service-sizes-and-limits.html"
+        },
+        {
+          "title": "Amazon Kinesis Data Streams terminology and concepts",
+          "url": "https://docs.aws.amazon.com/streams/latest/dev/key-concepts.html"
+        },
+        {
+          "title": "Develop enhanced fan-out consumers with dedicated throughput",
+          "url": "https://docs.aws.amazon.com/streams/latest/dev/enhanced-consumers.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:2eeb6a8a5a0b83cdcfaa514b9e2238ebb0772a7204921342b0b5509be6c00d47"
+    },
+    {
+      "id": "dva-c03/messaging/0008",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.1",
+      "services": [
+        "step-functions",
+        "lambda"
+      ],
+      "tags": [
+        "error-handling",
+        "retry",
+        "catch"
+      ],
+      "stem": "A developer is building an {{t:AWS Step Functions}} Standard workflow in which a Task state invokes an {{t:AWS Lambda}} function to look up an order. Under load the invocation occasionally fails with {{code:Lambda.TooManyRequestsException}}. The function also raises a custom {{code:OrderNotFoundError}} when the order ID does not exist. The developer wants the throttling error to be retried up to five times with exponentially increasing waits, and {{code:OrderNotFoundError}} to transition to a state named {{code:NotifySupport}} instead of failing the execution. Any other error must still fail the execution so that it is surfaced to the on-call team. Which combination of changes to the Task state definition meets these requirements? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Add a {{code:Catch}} field whose first catcher has {{code:ErrorEquals}} set to {{code:States.ALL}} and {{code:Next}} set to {{code:NotifySupport}}.",
+          "correct": false,
+          "explanation": "{{code:States.ALL}} matches every error, so this catcher would also send the throttling error (once the retrier gives up), {{code:States.Timeout}} and any other failure to {{code:NotifySupport}} as if the order were missing, which violates the requirement that other errors still fail the execution; a {{code:States.ALL}} catcher must also be the last catcher in the list, otherwise more specific catchers after it can never match."
+        },
+        {
+          "id": "b",
+          "text": "Add a {{code:Retry}} field with {{code:ErrorEquals}} set to {{code:Lambda.TooManyRequestsException}}, {{code:IntervalSeconds}} of 2, {{code:BackoffRate}} of 2.0 and {{code:MaxAttempts}} of 5.",
+          "correct": true,
+          "explanation": "Retriers are evaluated before catchers. This retrier waits 2, 4, 8, 16 and 32 seconds between attempts and gives up after five retries; the optional {{code:MaxDelaySeconds}} and {{code:JitterStrategy}} fields can cap and randomise the waits."
+        },
+        {
+          "id": "c",
+          "text": "Set the Lambda function's asynchronous invocation setting for maximum retry attempts to 5 so that Lambda retries the throttled invocations itself.",
+          "correct": false,
+          "explanation": "The {{code:lambda:invoke}} integration calls the function synchronously, so the asynchronous retry and destination settings never apply; retries for a Step Functions task are defined in the state machine."
+        },
+        {
+          "id": "d",
+          "text": "Add a {{code:Catch}} field with {{code:ErrorEquals}} set to {{code:OrderNotFoundError}}, {{code:Next}} set to {{code:NotifySupport}} and {{code:ResultPath}} set to {{code:$.error}}.",
+          "correct": true,
+          "explanation": "When a Lambda function throws, Step Functions sets the error name to the function's error type, so the custom name can be matched directly. The catcher routes the execution to {{code:NotifySupport}}, and {{code:ResultPath}} appends the error details to the state input instead of replacing it."
+        },
+        {
+          "id": "e",
+          "text": "Insert a Wait state of 30 seconds before the Task state so that the function is less likely to be throttled.",
+          "correct": false,
+          "explanation": "A fixed pause before every invocation slows the whole workflow, does not react to errors and does not handle the custom error at all; Step Functions error handling belongs in {{code:Retry}} and {{code:Catch}}."
+        }
+      ],
+      "explanation": "In a Task state, {{code:Retry}} handles transient errors with {{code:ErrorEquals}}, {{code:IntervalSeconds}} (default 1), {{code:BackoffRate}} (default 2.0) and {{code:MaxAttempts}} (default 3), and {{code:Catch}} routes errors that remain to another state with {{code:Next}} and {{code:ResultPath}}. Retriers run before catchers, catchers are evaluated in order, and {{code:States.ALL}} must come last. Lambda errors surface as {{code:Lambda.ServiceException}}, {{code:Lambda.TooManyRequestsException}} and similar names for service-level failures, or as the function's own error name for exceptions thrown in code.",
+      "references": [
+        {
+          "title": "Handling error conditions using a Step Functions state machine",
+          "url": "https://docs.aws.amazon.com/step-functions/latest/dg/concepts-error-handling.html"
+        },
+        {
+          "title": "Invoke Lambda with Step Functions",
+          "url": "https://docs.aws.amazon.com/step-functions/latest/dg/connect-lambda.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:c1ace25cc0508abe2d1211908061be7f9d3c1d0d9769da2103a590170d4d83bf"
+    },
+    {
+      "id": "dva-c03/messaging/0009",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 3,
+      "domainId": "d1",
+      "taskId": "1.1",
+      "services": [
+        "step-functions",
+        "lambda"
+      ],
+      "tags": [
+        "callback-pattern",
+        "task-token",
+        "standard-vs-express",
+        "limits"
+      ],
+      "stem": "A developer is building an expense-approval workflow with {{t:AWS Step Functions}}. An {{t:AWS Lambda}} function validates the expense report, after which the workflow must pause until a manager approves or rejects the report in an internal web application, which can take up to 5 days. As soon as the decision is submitted, the workflow must resume and either call a reimbursement API or send a rejection email. Which solution meets these requirements MOST cost-effectively?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Use an {{t:Express Workflows}} state machine with a Wait state inside a loop that checks an {{t:Amazon DynamoDB}} table for the manager's decision every minute.",
+          "correct": false,
+          "explanation": "Express workflows have a maximum duration of 5 minutes, so an execution that may wait for 5 days cannot complete; they are also billed by duration, which penalises waiting."
+        },
+        {
+          "id": "b",
+          "text": "Use a {{t:Standard Workflows}} state machine in which a Lambda Task state polls the DynamoDB table in a loop, sleeping between checks, until the manager's decision appears, and then returns the decision as the task output to the workflow.",
+          "correct": false,
+          "explanation": "A Lambda invocation cannot run longer than 15 minutes, so the function would time out long before a decision arrives, and the workflow would pay for compute time spent doing nothing."
+        },
+        {
+          "id": "c",
+          "text": "Use a Standard workflow with a loop of a 5-minute Wait state, a Lambda check and a Choice state that repeats until the decision is recorded in the table.",
+          "correct": false,
+          "explanation": "This works within Standard limits, but every iteration costs three state transitions (over 4,000 for a 5-day wait) plus Lambda invocations, and the workflow resumes up to 5 minutes after the decision rather than immediately."
+        },
+        {
+          "id": "d",
+          "text": "Use a Standard workflow with a {{code:.waitForTaskToken}} Task state that passes {{code:$$.Task.Token}} to the web application, which calls {{code:SendTaskSuccess}} or {{code:SendTaskFailure}} when the manager decides.",
+          "correct": true,
+          "explanation": "The callback pattern pauses the Task state for up to the one-year limit of Standard workflows at no cost while idle (there are no transitions while waiting), and the execution resumes the instant the token is returned. Set {{code:TimeoutSeconds}} on the state (or {{code:HeartbeatSeconds}} if the web application sends {{code:SendTaskHeartbeat}} periodically) so that an abandoned approval eventually fails with {{code:States.Timeout}} instead of waiting a full year."
+        }
+      ],
+      "explanation": "Use {{code:.waitForTaskToken}} (for example {{code:arn:aws:states:::sqs:sendMessage.waitForTaskToken}} or {{code:lambda:invoke.waitForTaskToken}}) whenever a workflow must wait for a human or an external system; the task token is in the context object as {{code:$$.Task.Token}} and the external party calls {{code:SendTaskSuccess}}, {{code:SendTaskFailure}} or {{code:SendTaskHeartbeat}}. Standard workflows run up to one year, provide exactly-once execution and are priced per state transition; Express workflows run at most 5 minutes, offer at-least-once (asynchronous) semantics, are priced by executions and duration, and do not support the callback or {{code:.sync}} patterns. Step Functions is also the answer when a job exceeds Lambda's 15-minute limit.",
+      "references": [
+        {
+          "title": "Step Functions service integration patterns",
+          "url": "https://docs.aws.amazon.com/step-functions/latest/dg/connect-to-resource.html"
+        },
+        {
+          "title": "Standard vs. Express Workflows",
+          "url": "https://docs.aws.amazon.com/step-functions/latest/dg/concepts-standard-vs-express.html"
+        },
+        {
+          "title": "Callback pattern example (Amazon SQS, Amazon SNS, Lambda)",
+          "url": "https://docs.aws.amazon.com/step-functions/latest/dg/callback-task-sample-sqs.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:4fa18034bcb17c8524fd3ee2a44414f0f98ff1623ea3a018f53c6bb8110c783f"
+    },
+    {
+      "id": "dva-c03/messaging/0010",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.1",
+      "services": [
+        "sqs",
+        "dynamodb",
+        "ecs"
+      ],
+      "tags": [
+        "idempotency",
+        "at-least-once",
+        "conditional-write"
+      ],
+      "stem": "A consumer service on {{t:Amazon ECS}} reads payment-confirmation messages from an {{t:Amazon SQS}} standard queue and sends one confirmation email per message. Some customers occasionally receive the same email twice, and the logs show that the same SQS message ID was delivered to two different tasks a few minutes apart. Every confirmation must still be sent at least once, including after a task crashes mid-processing. Which approach will MOST reliably prevent the duplicate emails?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Before sending the email, claim the payment ID with a conditional {{code:PutItem}} ({{code:attribute_not_exists(paymentId)}}) in an {{t:Amazon DynamoDB}} table; skip the send on {{code:ConditionalCheckFailedException}}.",
+          "correct": true,
+          "explanation": "A conditional write is an atomic claim: exactly one delivery of a given payment ID wins the write and sends the email, and every later redelivery sees {{code:ConditionalCheckFailedException}} and simply deletes the message. A status attribute on the claim lets a retry finish a send that crashed half-way, and a TTL attribute keeps the table small."
+        },
+        {
+          "id": "b",
+          "text": "Migrate the producer and the consumer to an SQS FIFO queue with {{code:ContentBasedDeduplication}} enabled and the payment ID as the {{code:MessageGroupId}} so that SQS removes the duplicate messages before they reach the consumer.",
+          "correct": false,
+          "explanation": "FIFO deduplication suppresses duplicate sends by the producer within a 5-minute interval; it does not stop a message from being redelivered when a consumer fails or exceeds the visibility timeout before deleting it, so the consumer still needs to be idempotent."
+        },
+        {
+          "id": "c",
+          "text": "Call {{code:DeleteMessage}} immediately after each {{code:ReceiveMessage}} call, before the email is sent, so that no other task can receive the same message while the email is being generated.",
+          "correct": false,
+          "explanation": "Deleting first makes delivery at-most-once: if the task crashes between the delete and the send, the confirmation is lost, which violates the requirement that every email is eventually sent."
+        },
+        {
+          "id": "d",
+          "text": "Increase the queue's visibility timeout to the maximum of 12 hours so that a message cannot become visible again while another task might still be processing it or waiting on the email provider.",
+          "correct": false,
+          "explanation": "A longer visibility timeout reduces redeliveries caused by slow processing, but a crashed task still leaves the message to reappear later, and a legitimate retry would now be delayed by up to 12 hours."
+        }
+      ],
+      "explanation": "Standard queues deliver at least once, so occasional duplicates (the same message ID delivered twice) are by design and every consumer must be idempotent: the consumer owns deduplication, not the queue. The standard pattern is a DynamoDB conditional write keyed by a business or message identifier ({{code:attribute_not_exists}}), treating {{code:ConditionalCheckFailedException}} as 'already processed'. FIFO queues prevent producer-side duplicates and give ordering, but redelivery after a consumer failure still happens there too.",
+      "references": [
+        {
+          "title": "Amazon SQS standard queues (at-least-once delivery)",
+          "url": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/standard-queues.html"
+        },
+        {
+          "title": "DynamoDB condition expressions",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ConditionExpressions.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:ad82414d2f02ae0ae4fcd83f01c45eaa660213ce7ce0d4dd20b27b46873c4506"
+    },
+    {
+      "id": "dva-c03/messaging/0011",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d1",
+      "taskId": "1.1",
+      "services": [
+        "lambda",
+        "dynamodb",
+        "sqs"
+      ],
+      "tags": [
+        "sdk-retries",
+        "exponential-backoff",
+        "throttling"
+      ],
+      "stem": "A Python {{t:AWS Lambda}} function uses the {{t:AWS SDK for Python (Boto3)}} to write to {{t:Amazon DynamoDB}} and {{t:Amazon SQS}}. During traffic spikes a small percentage of calls fail with {{code:ProvisionedThroughputExceededException}} or {{code:ThrottlingException}}. A developer wrapped each call in a loop that retries immediately up to 10 times, and the error rate became worse. What should the developer do to handle these errors MOST effectively with the FEWEST code changes?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Remove the loop and increase the function timeout to 15 minutes so that slow calls have enough time to complete during the spike.",
+          "correct": false,
+          "explanation": "Throttling is a rejected request, not a slow one; a longer timeout does not change how the SDK reacts to the error, and the call would still fail on its first attempt."
+        },
+        {
+          "id": "b",
+          "text": "Remove the loop and rely on the SDK's built-in retries, setting {{code:AWS_RETRY_MODE}} to {{code:standard}} or {{code:adaptive}} and raising {{code:AWS_MAX_ATTEMPTS}} through environment variables.",
+          "correct": true,
+          "explanation": "The SDK already recognises throttling errors as retryable and applies exponential backoff with jitter; standard mode allows three attempts by default and adaptive mode adds client-side rate limiting. Changing the retry mode and attempt count is configuration, not new logic (the same settings can be passed as a {{code:botocore.config.Config}} {{code:retries}} dictionary), and the randomised delays stop the clients from retrying in lockstep."
+        },
+        {
+          "id": "c",
+          "text": "Keep the loop but add a fixed one-second sleep between attempts so that the downstream service has time to recover between retries.",
+          "correct": false,
+          "explanation": "A fixed interval causes every throttled client to retry at the same moment, producing repeated bursts; it also duplicates logic the SDK provides and must be maintained in every call site."
+        },
+        {
+          "id": "d",
+          "text": "Catch the exceptions and publish the failed requests to a separate SQS queue so that a second Lambda function, configured with a small batch size and limited concurrency, can replay them later at a controlled rate.",
+          "correct": false,
+          "explanation": "Buffering writes is a valid pattern for sustained overload, but it adds a queue, a second function and new semantics for what was a transient spike; it is far more than the configuration change that solves the problem."
+        }
+      ],
+      "explanation": "Throttling errors ({{code:ThrottlingException}}, {{code:ProvisionedThroughputExceededException}}, HTTP 429) are a signal to slow down, and the correct response is exponential backoff with jitter, which every AWS SDK implements. Tune it through configuration rather than code: {{code:AWS_RETRY_MODE}} (legacy, standard or adaptive) and {{code:AWS_MAX_ATTEMPTS}} as environment variables, {{code:retry_mode}} and {{code:max_attempts}} in the shared config file, or the client's retry configuration object. Immediate or fixed-interval retries amplify the very load that caused the throttling.",
+      "references": [
+        {
+          "title": "AWS SDKs and Tools – Retry behavior",
+          "url": "https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html"
+        },
+        {
+          "title": "Error handling with DynamoDB",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Programming.Errors.html"
+        },
+        {
+          "title": "Timeouts, retries, and backoff with jitter (Amazon Builders' Library)",
+          "url": "https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:fded57b58caca5a9e359b423ee5d8bad038d8366a7ff23ef07861377acb35dbd"
+    }
+  ]
+}

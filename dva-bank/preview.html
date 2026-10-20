@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DVA bank preview</title>
+<style>
+  :root { --bg:#0f1115; --card:#171a21; --ink:#e8eaf0; --muted:#9aa3b2; --line:#2a2f3a; --ok:#2ecc71; --bad:#ff6b6b; --acc:#7aa2ff; --warn:#f6c343; }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:12px 16px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:2 }
+  header select, header button { background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit }
+  main { max-width:860px; margin:0 auto; padding:20px 16px 80px }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px }
+  .meta { color:var(--muted); font-size:13px; display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px }
+  .stem { font-size:18px; margin:0 0 16px }
+  .term { font-weight:600; color:#cfe0ff }
+  code { background:#0b0d12; border:1px solid var(--line); border-radius:6px; padding:1px 6px; font-size:0.92em }
+  .choice { display:flex; gap:12px; align-items:flex-start; border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:8px 0; cursor:pointer; background:#12151c }
+  .choice:hover { border-color:#3b4250 }
+  .choice.sel { border-color:var(--acc); background:#151b2b }
+  .choice.ok { border-color:var(--ok) } .choice.bad { border-color:var(--bad) }
+  .choice .key { color:var(--muted); min-width:1.4em; font-variant-numeric:tabular-nums }
+  .choice .exp { display:none; color:var(--muted); font-size:14px; margin-top:6px }
+  .revealed .choice .exp { display:block }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:14px }
+  .btn { background:var(--acc); color:#0b0d12; border:0; border-radius:10px; padding:10px 16px; font:inherit; font-weight:600; cursor:pointer }
+  .btn.ghost { background:transparent; color:var(--ink); border:1px solid var(--line) }
+  .pill { border:1px solid var(--line); border-radius:999px; padding:6px 12px; cursor:pointer; color:var(--muted) }
+  .pill.on { border-color:var(--warn); color:var(--warn) }
+  .verdict { font-weight:700; margin:14px 0 6px } .verdict.ok { color:var(--ok) } .verdict.bad { color:var(--bad) }
+  .explain { border-left:3px solid var(--acc); padding:8px 12px; color:#d5dae6; margin-top:8px }
+  .refs a { color:var(--acc); font-size:14px; display:block }
+  .stats { color:var(--muted); font-size:13px }
+  kbd { border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:12px; color:var(--muted) }
+</style>
+</head>
+<body>
+<header>
+  <strong>DVA bank</strong>
+  <select id="section"></select>
+  <select id="mode">
+    <option value="learn">Learn (in order)</option>
+    <option value="missed">Review missed</option>
+    <option value="unseen">Unseen only</option>
+    <option value="shuffle">Random mix (all sections)</option>
+  </select>
+  <button id="reset">Reset progress</button>
+  <span class="stats" id="stats"></span>
+</header>
+<main>
+  <div id="app" class="card">Loading…</div>
+  <p class="stats">Keys: <kbd>1</kbd>–<kbd>6</kbd> select · <kbd>S</kbd> toggle sure/unsure · <kbd>Enter</kbd> submit / next. Serve this folder (e.g. <code>npx serve .</code>) — fetch does not work from file://.</p>
+</main>
+<script>
+const COURSE = "content/dva-c03";
+const LS = "dva-preview-progress";
+let course, sections = {}, queue = [], idx = 0, current = null, selected = new Set(), sure = false, revealed = false;
+let progress = JSON.parse(localStorage.getItem(LS) || "{}"); // {qid: {seen, correct, wrong, cw}}
+
+const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const render = s => esc(s).replace(/\{\{t:([^}]+)\}\}/g, '<span class="term" lang="en">$1</span>').replace(/\{\{code:([^}]+)\}\}/g, '<code>$1</code>');
+const shuffle = a => { for (let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]} return a };
+const save = () => localStorage.setItem(LS, JSON.stringify(progress));
+
+async function load() {
+  course = await (await fetch(`${COURSE}/course.json`)).json();
+  const sel = document.getElementById("section");
+  for (const s of course.sections) {
+    const data = await (await fetch(`${COURSE}/${s.file}`)).json();
+    sections[s.id] = data.questions.filter(q => !q.retired);
+    sel.append(new Option(`${s.order}. ${s.title} (${sections[s.id].length})`, s.id));
+  }
+  buildQueue();
+}
+function buildQueue() {
+  const mode = document.getElementById("mode").value, sid = document.getElementById("section").value;
+  const pool = mode === "shuffle" ? Object.values(sections).flat() : sections[sid];
+  queue = pool.filter(q => mode === "missed" ? (progress[q.id]?.wrong > 0 && !(progress[q.id]?.lastCorrect)) : mode === "unseen" ? !progress[q.id]?.seen : true);
+  if (mode === "shuffle" || mode === "missed") shuffle(queue);
+  idx = 0; show();
+}
+function show() {
+  const app = document.getElementById("app");
+  updateStats();
+  if (!queue.length || idx >= queue.length) { app.innerHTML = `<p>Done with this set. Switch section or mode above.</p>`; current = null; return; }
+  current = queue[idx]; selected = new Set(); sure = false; revealed = false;
+  const choices = shuffle(current.choices.map(c => ({...c})));
+  current._order = choices;
+  app.classList.remove("revealed");
+  app.innerHTML = `
+    <div class="meta"><span>${idx+1} / ${queue.length}</span><span>${current.id}</span><span>${current.type === "multi" ? "Choose " + current.selectCount : "Single answer"}</span><span>difficulty ${current.difficulty}</span><span>${current.services.join(", ")}</span></div>
+    <p class="stem">${render(current.stem)}</p>
+    <div id="choices">${choices.map((c,i)=>`<div class="choice" data-id="${c.id}"><span class="key">${i+1}</span><div><div>${render(c.text)}</div><div class="exp">${render(c.explanation)}</div></div></div>`).join("")}</div>
+    <div class="row"><span class="pill" id="sure">I'm sure</span><button class="btn" id="submit">Submit</button><span class="stats">(mark sure before submitting — confident-wrong is the bucket to watch)</span></div>
+    <div id="result"></div>`;
+  app.querySelectorAll(".choice").forEach(el => el.onclick = () => toggle(el.dataset.id));
+  document.getElementById("sure").onclick = toggleSure;
+  document.getElementById("submit").onclick = submit;
+}
+function toggle(id) {
+  if (revealed) return;
+  if (current.type === "single") selected = new Set([id]);
+  else selected.has(id) ? selected.delete(id) : selected.add(id);
+  document.querySelectorAll(".choice").forEach(el => el.classList.toggle("sel", selected.has(el.dataset.id)));
+}
+function toggleSure() { sure = !sure; document.getElementById("sure").classList.toggle("on", sure); }
+function submit() {
+  if (revealed) { idx++; show(); return; }
+  if (!selected.size) return;
+  revealed = true;
+  const correctIds = new Set(current.choices.filter(c => c.correct).map(c => c.id));
+  const ok = correctIds.size === selected.size && [...selected].every(id => correctIds.has(id));
+  document.querySelectorAll(".choice").forEach(el => { el.classList.add(correctIds.has(el.dataset.id) ? "ok" : (selected.has(el.dataset.id) ? "bad" : "x")); });
+  document.getElementById("app").classList.add("revealed");
+  const p = progress[current.id] ??= { seen:0, correct:0, wrong:0, cw:0 };
+  p.seen++; ok ? p.correct++ : p.wrong++; if (!ok && sure) p.cw++; p.lastCorrect = ok; save();
+  document.getElementById("result").innerHTML = `
+    <div class="verdict ${ok?"ok":"bad"}">${ok ? "Correct" : "Wrong"}${!ok && sure ? " — and you were sure. Read the explanation twice." : ""}</div>
+    <div class="explain">${render(current.explanation)}</div>
+    <div class="refs" style="margin-top:8px">${current.references.map(r => `<a href="${r.url}" target="_blank" rel="noopener">${esc(r.title)}</a>`).join("")}</div>`;
+  document.getElementById("submit").textContent = "Next";
+  updateStats();
+}
+function updateStats() {
+  const all = Object.values(sections).flat(); const seen = all.filter(q => progress[q.id]?.seen).length;
+  const wrong = all.filter(q => progress[q.id]?.wrong && !progress[q.id]?.lastCorrect).length;
+  const cw = Object.values(progress).reduce((a,p)=>a+(p.cw||0),0);
+  document.getElementById("stats").textContent = `${seen}/${all.length} seen · ${wrong} currently missed · ${cw} confident-wrong`;
+}
+document.getElementById("section").onchange = buildQueue;
+document.getElementById("mode").onchange = buildQueue;
+document.getElementById("reset").onclick = () => { if (confirm("Clear local progress?")) { progress = {}; save(); buildQueue(); } };
+document.addEventListener("keydown", e => {
+  if (!current) return;
+  if (e.key >= "1" && e.key <= "6") { const c = current._order[+e.key-1]; if (c) toggle(c.id); }
+  else if (e.key.toLowerCase() === "s" && !revealed) toggleSure();
+  else if (e.key === "Enter") submit();
+});
+load();
+</script>
+</body>
+</html>

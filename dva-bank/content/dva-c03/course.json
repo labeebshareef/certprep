@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "id": "dva-c03",
+  "title": "AWS Certified Developer – Associate (DVA-C03)",
+  "examCode": "DVA-C03",
+  "examGuideStatus": "provisional",
+  "notes": "Domain weights are from AWS's September 2026 announcement (30/26/22/22). Task statements are carried over from the DVA-C02 guide v2.1 and are PROVISIONAL until the official DVA-C03 exam guide is published on 2026-10-27; retag question taskIds against that guide. This seed bank covers only the core that is unchanged between C02 and C03. New C03 topics (Bedrock, AgentCore, Amazon Q, Kiro, Data Firehose, PrivateLink, AI-security task) are deliberately absent until the guide is out.",
+  "passingScaled": 720,
+  "questionsOnExam": 65,
+  "minutes": 130,
+  "domains": [
+    {
+      "id": "d1",
+      "title": "Development with AWS Services",
+      "weight": 0.30,
+      "tasks": [
+        { "id": "1.1", "title": "Develop code for applications hosted on AWS" },
+        { "id": "1.2", "title": "Develop code for AWS Lambda" },
+        { "id": "1.3", "title": "Use data stores in application development" }
+      ]
+    },
+    {
+      "id": "d2",
+      "title": "Security",
+      "weight": 0.26,
+      "tasks": [
+        { "id": "2.1", "title": "Implement authentication and/or authorization for applications and AWS services" },
+        { "id": "2.2", "title": "Implement encryption by using AWS services" },
+        { "id": "2.3", "title": "Manage sensitive data in application code" }
+      ]
+    },
+    {
+      "id": "d3",
+      "title": "Testing and Deployment",
+      "weight": 0.22,
+      "tasks": [
+        { "id": "3.1", "title": "Prepare application artifacts to be deployed to AWS" },
+        { "id": "3.2", "title": "Test applications in development environments" },
+        { "id": "3.3", "title": "Automate deployment testing" },
+        { "id": "3.4", "title": "Deploy code by using AWS CI/CD services" }
+      ]
+    },
+    {
+      "id": "d4",
+      "title": "Troubleshooting and Optimization",
+      "weight": 0.22,
+      "tasks": [
+        { "id": "4.1", "title": "Assist in a root cause analysis" },
+        { "id": "4.2", "title": "Instrument code for observability" },
+        { "id": "4.3", "title": "Optimize applications by using AWS services and features" }
+      ]
+    }
+  ],
+  "sections": [
+    { "id": "lambda", "order": 1, "domainId": "d1", "title": "AWS Lambda", "file": "topics/d1-lambda.json", "unlock": { "requires": [], "passPct": 0.8, "quizSize": 10 } },
+    { "id": "dynamodb", "order": 2, "domainId": "d1", "title": "Amazon DynamoDB", "file": "topics/d1-dynamodb.json", "unlock": { "requires": ["lambda"], "passPct": 0.8, "quizSize": 10 } },
+    { "id": "messaging", "order": 3, "domainId": "d1", "title": "SQS, SNS, EventBridge, Kinesis and Step Functions", "file": "topics/d1-messaging.json", "unlock": { "requires": ["dynamodb"], "passPct": 0.8, "quizSize": 10 } },
+    { "id": "iam-cognito", "order": 4, "domainId": "d2", "title": "IAM, STS and Amazon Cognito", "file": "topics/d2-iam-cognito.json", "unlock": { "requires": ["messaging"], "passPct": 0.8, "quizSize": 10 } },
+    { "id": "encryption-secrets", "order": 5, "domainId": "d2", "title": "KMS, encryption and secrets", "file": "topics/d2-encryption-secrets.json", "unlock": { "requires": ["iam-cognito"], "passPct": 0.8, "quizSize": 10 } },
+    { "id": "cicd", "order": 6, "domainId": "d3", "title": "CI/CD with CodePipeline, CodeBuild and CodeDeploy", "file": "topics/d3-cicd.json", "unlock": { "requires": ["encryption-secrets"], "passPct": 0.8, "quizSize": 10 } },
+    { "id": "iac-apigw-containers", "order": 7, "domainId": "d3", "title": "SAM, CloudFormation, API Gateway stages and containers", "file": "topics/d3-iac-apigw-containers.json", "unlock": { "requires": ["cicd"], "passPct": 0.8, "quizSize": 10 } },
+    { "id": "observability", "order": 8, "domainId": "d4", "title": "CloudWatch, X-Ray and optimization", "file": "topics/d4-observability.json", "unlock": { "requires": ["iac-apigw-containers"], "passPct": 0.8, "quizSize": 10 } }
+  ],
+  "locales": ["en", "ml"],
+  "glossary": "glossary.json"
+}

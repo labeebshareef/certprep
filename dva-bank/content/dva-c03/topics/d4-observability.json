@@ -1,0 +1,779 @@
+{
+  "schemaVersion": 1,
+  "courseId": "dva-c03",
+  "sectionId": "observability",
+  "title": "CloudWatch, X-Ray and optimization",
+  "questions": [
+    {
+      "id": "dva-c03/observability/0001",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d4",
+      "taskId": "4.2",
+      "services": [
+        "lambda",
+        "cloudwatch",
+        "iam"
+      ],
+      "tags": [
+        "cloudwatch-logs",
+        "execution-role",
+        "troubleshooting"
+      ],
+      "stem": "A developer deploys a new {{t:AWS Lambda}} function with the {{t:AWS CLI}} and attaches a custom execution role that grants only {{code:dynamodb:GetItem}} on one table. The function returns correct results when it is invoked, but the developer cannot find any log output in {{t:Amazon CloudWatch Logs}}, and the log group {{code:/aws/lambda/<function-name>}} does not exist. What is the MOST likely cause?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "The execution role lacks the {{code:logs:CreateLogGroup}}, {{code:logs:CreateLogStream}} and {{code:logs:PutLogEvents}} permissions.",
+          "correct": true,
+          "explanation": "The {{t:Lambda}} service creates the log group and log stream and ships the function's stdout/stderr by using the execution role's credentials. Without those three permissions the invocation still succeeds, but log delivery fails silently and the log group is never created. Attaching {{code:AWSLambdaBasicExecutionRole}} (or adding the three actions) fixes it."
+        },
+        {
+          "id": "b",
+          "text": "The log group was created automatically with the account's default retention setting of 1 day, so the log group and its streams expired before the developer looked for them in the console.",
+          "correct": false,
+          "explanation": "Automatically created {{t:Lambda}} log groups default to 'Never expire', and a retention policy deletes old log events, not the log group itself. The stem says the group does not exist at all, which points at permissions, not retention."
+        },
+        {
+          "id": "c",
+          "text": "Active tracing with {{t:AWS X-Ray}} is not enabled on the function, so the runtime never starts the agent that forwards standard output to {{t:CloudWatch Logs}}.",
+          "correct": false,
+          "explanation": "{{t:X-Ray}} tracing and {{t:CloudWatch Logs}} are independent. Anything the function prints is sent to {{t:CloudWatch Logs}} whether or not tracing is Active; enabling tracing would only add trace segments, not fix missing logs."
+        },
+        {
+          "id": "d",
+          "text": "The function code must call {{code:CreateLogGroup}} explicitly before writing with {{code:PutLogEvents}}.",
+          "correct": false,
+          "explanation": "Function code never calls the {{t:CloudWatch Logs}} API for normal logging. The {{t:Lambda}} service captures stdout/stderr and creates the group and stream itself on first invocation, provided the execution role allows it."
+        }
+      ],
+      "explanation": "{{t:Lambda}} writes everything a function prints to {{code:/aws/lambda/<function-name>}} by using the execution role, so the role needs {{code:logs:CreateLogGroup}}, {{code:logs:CreateLogStream}} and {{code:logs:PutLogEvents}}, which is exactly what the {{code:AWSLambdaBasicExecutionRole}} managed policy grants. A missing logging permission is silent: the function keeps working. Rule of thumb: 'function works but the log group does not exist' means check the role; 'log group exists but recent events are missing' means check retention or a custom log group setting.",
+      "references": [
+        {
+          "title": "Sending Lambda function logs to CloudWatch Logs",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs.html"
+        },
+        {
+          "title": "Lambda execution role",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:8e590ce15b64ed12f1b2698fca3b04505ca1c086cef4fd30904175ee3f502c67"
+    },
+    {
+      "id": "dva-c03/observability/0002",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 2,
+      "domainId": "d4",
+      "taskId": "4.1",
+      "services": [
+        "lambda",
+        "cloudwatch"
+      ],
+      "tags": [
+        "logs-insights",
+        "structured-logging",
+        "root-cause-analysis",
+        "least-ops-overhead"
+      ],
+      "stem": "A payments team runs 40 {{t:AWS Lambda}} functions that write free-text log lines to {{t:Amazon CloudWatch Logs}}. During incidents, engineers download log files and use grep to answer ad hoc questions such as which 10 customers received the most {{code:PaymentDeclined}} errors in the last 24 hours. The team wants to answer such questions directly in the AWS console within minutes, without building or maintaining a data pipeline. Which combination of steps will meet these requirements with the LEAST operational overhead? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Create a subscription filter on each log group that streams events through {{t:Amazon Data Firehose}} to {{t:Amazon S3}}, and query the data with {{t:Amazon Athena}}.",
+          "correct": false,
+          "explanation": "This works, but it is precisely the pipeline the team wants to avoid: a delivery stream, an {{t:S3}} layout, a table definition and 40 subscription filters to keep in sync. Subscription filters are the right tool for streaming logs to another system, not for ad hoc investigation."
+        },
+        {
+          "id": "b",
+          "text": "Run a {{t:CloudWatch Logs Insights}} query across the log groups that uses {{code:filter}} on the error code, {{code:stats count(*) by customerId}}, {{code:sort}} descending and {{code:limit 10}}.",
+          "correct": true,
+          "explanation": "{{t:Logs Insights}} queries log groups in place, several at a time, over any time window, with a purpose-built query language ({{code:fields}}, {{code:filter}}, {{code:stats}}, {{code:sort}}, {{code:limit}}, {{code:parse}}). There is nothing to deploy; you pay per GB of log data scanned."
+        },
+        {
+          "id": "c",
+          "text": "Create a metric filter on each log group that counts {{code:PaymentDeclined}} events, and view the metric on a {{t:CloudWatch}} dashboard.",
+          "correct": false,
+          "explanation": "A metric filter turns a log pattern into a numeric metric going forward; it only sees events ingested after it is created, supports at most three dimensions, and cannot list the top 10 customers from past log events. It is for alarms and dashboards, not for root-cause queries."
+        },
+        {
+          "id": "d",
+          "text": "Change the functions to emit structured JSON log events (for example with the {{t:Powertools for AWS Lambda}} logger or the {{t:Lambda}} JSON log format) that include {{code:customerId}} and {{code:errorCode}} fields.",
+          "correct": true,
+          "explanation": "{{t:Logs Insights}} automatically discovers fields in JSON log events, so {{code:customerId}} and {{code:errorCode}} become directly queryable in every one of the 40 functions without writing a {{code:parse}} regex per log format."
+        },
+        {
+          "id": "e",
+          "text": "Search the {{t:AWS CloudTrail}} event history for events whose error code is {{code:PaymentDeclined}} and group them by customer.",
+          "correct": false,
+          "explanation": "{{t:CloudTrail}} records AWS API calls made by principals (who called {{code:DeleteTable}} and when). A business error raised inside function code is never an API event, so {{t:CloudTrail}} cannot answer this question at all."
+        }
+      ],
+      "explanation": "Ad hoc root-cause analysis over existing log groups is a {{t:CloudWatch Logs Insights}} job: it runs in place, across many log groups and any period, and needs no infrastructure. Structured JSON logging is what makes the query trivial, because Insights auto-discovers JSON fields. Keep the tools straight: metric filters turn a pattern into a metric and alarm going forward, subscription filters stream events to {{t:Lambda}}, {{t:Kinesis}} or {{t:Firehose}}, and {{t:CloudTrail}} answers 'who called which AWS API', never application errors.",
+      "references": [
+        {
+          "title": "Analyzing log data with CloudWatch Logs Insights",
+          "url": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/AnalyzingLogData.html"
+        },
+        {
+          "title": "CloudWatch Logs Insights query syntax",
+          "url": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CWL_QuerySyntax.html"
+        },
+        {
+          "title": "Supported logs and discovered fields",
+          "url": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CWL_AnalyzeLogData-discoverable-fields.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:f73b6a548b2ca6e7de31eb86a95896f388706b7046d52202d96db644e45f7239"
+    },
+    {
+      "id": "dva-c03/observability/0003",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d4",
+      "taskId": "4.2",
+      "services": [
+        "cloudwatch",
+        "ssm"
+      ],
+      "tags": [
+        "cloudwatch-agent",
+        "ec2",
+        "custom-metrics",
+        "least-ops-overhead"
+      ],
+      "stem": "A developer runs a Java application on a fleet of {{t:Amazon EC2}} instances. The application crashes under memory pressure, and the team wants an {{t:Amazon CloudWatch}} alarm when memory utilization exceeds 85%. The developer enabled detailed monitoring on the instances, but no memory metric appears in the {{code:AWS/EC2}} namespace. Which solution will provide the memory metric with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Enable detailed monitoring again and wait up to 15 minutes for the {{code:MemoryUtilization}} metric to appear in the {{code:AWS/EC2}} namespace.",
+          "correct": false,
+          "explanation": "Detailed monitoring only changes the period of the hypervisor-level metrics (CPU, network, disk I/O, status checks) from 5 minutes to 1 minute, at extra cost. Memory is not visible to the hypervisor and is never published to {{code:AWS/EC2}}, however long you wait."
+        },
+        {
+          "id": "b",
+          "text": "Write a cron job on each instance that reads memory usage from {{code:/proc/meminfo}}, calls {{code:PutMetricData}} every minute with an {{code:InstanceId}} dimension, and deploy the script to the fleet with {{t:AWS Systems Manager}} Run Command.",
+          "correct": false,
+          "explanation": "This works, but it is custom code that must be deployed, secured and maintained on every instance, and extended by hand for disk or swap later. The {{t:CloudWatch agent}} does the same job as a supported, configurable package."
+        },
+        {
+          "id": "c",
+          "text": "Install the {{t:CloudWatch agent}} with a configuration that collects {{code:mem_used_percent}}, and attach the {{code:CloudWatchAgentServerPolicy}} to the instance role.",
+          "correct": true,
+          "explanation": "The agent collects OS-level metrics such as memory, disk space and swap and publishes them to the {{code:CWAgent}} namespace. Keeping the configuration in {{t:Parameter Store}} lets {{t:Systems Manager Run Command}} roll it out to the whole fleet, and the alarm is then built on {{code:mem_used_percent}}."
+        },
+        {
+          "id": "d",
+          "text": "Enable {{t:AWS X-Ray}} active tracing in the application so that the {{t:X-Ray}} SDK reports memory statistics as segment metadata.",
+          "correct": false,
+          "explanation": "{{t:X-Ray}} traces request latency and downstream calls. It does not collect host metrics, and segment metadata is not indexed or alarmable, so it cannot drive a {{t:CloudWatch}} alarm."
+        }
+      ],
+      "explanation": "The built-in {{t:EC2}} metrics come from the hypervisor: {{code:CPUUtilization}}, network, disk I/O for instance store volumes and status checks. Memory used, disk space used, swap and per-process metrics require the {{t:CloudWatch agent}} (or a custom {{code:PutMetricData}} script). Detailed monitoring changes only the resolution of the existing metrics, from 5 minutes to 1 minute, and costs more; it never adds new metrics. The agent needs the {{code:CloudWatchAgentServerPolicy}} on the instance role.",
+      "references": [
+        {
+          "title": "Collect metrics and logs with the CloudWatch agent",
+          "url": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Install-CloudWatch-Agent.html"
+        },
+        {
+          "title": "Metrics collected by the CloudWatch agent",
+          "url": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/metrics-collected-by-CloudWatch-agent.html"
+        },
+        {
+          "title": "Monitor your instances using CloudWatch (EC2 User Guide)",
+          "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-cloudwatch.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:45699d2e4e22965a38030a7911fd5c806cf3899b949dc16d3a2a1616b6cc3f42"
+    },
+    {
+      "id": "dva-c03/observability/0004",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d4",
+      "taskId": "4.2",
+      "services": [
+        "lambda",
+        "cloudwatch"
+      ],
+      "tags": [
+        "custom-metrics",
+        "emf",
+        "powertools",
+        "least-ops-overhead"
+      ],
+      "stem": "An {{t:AWS Lambda}} function processes orders and must publish custom business metrics such as {{code:OrdersProcessed}} and {{code:OrderValue}} with a {{code:Region}} dimension so that the team can build dashboards and alarms. The function currently calls {{code:PutMetricData}} at the end of each invocation, which adds about 60 ms to every request and has caused {{code:cloudwatch:PutMetricData}} throttling at peak. The developer must keep publishing the metrics without adding latency to invocations and without creating additional {{t:CloudWatch}} resources for every new metric. Which solution meets these requirements with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Buffer the metric values in memory during the invocation and send a single batched {{code:PutMetricData}} request of up to 1,000 metrics from the handler just before it returns, with {{code:StorageResolution}} set to 60.",
+          "correct": false,
+          "explanation": "Batching reduces the number of API calls, but the request still runs synchronously inside the invocation: {{t:Lambda}} freezes the execution environment as soon as the handler returns, so the call cannot be deferred. Latency remains and throttling is only reduced, not removed."
+        },
+        {
+          "id": "b",
+          "text": "Create a metric filter on the function's log group for each metric that extracts the value from the log line and publishes it to a custom namespace.",
+          "correct": false,
+          "explanation": "Metric filters add no invocation latency, but every new metric needs its own filter (one metric per filter, at most three dimensions) that someone must create and maintain, which violates the 'no additional resources per metric' requirement."
+        },
+        {
+          "id": "c",
+          "text": "Record each order value as an {{t:AWS X-Ray}} annotation and create an {{t:X-Ray}} group whose metrics are published to {{t:CloudWatch}}.",
+          "correct": false,
+          "explanation": "An {{t:X-Ray}} group publishes only an approximate trace count for the traces that match its filter, and traces are sampled. Annotations cannot carry arbitrary business values into {{t:CloudWatch}}, and they are capped at 50 per trace."
+        },
+        {
+          "id": "d",
+          "text": "Write the metrics to standard output in the {{t:CloudWatch embedded metric format}}, for example with the {{t:Powertools for AWS Lambda}} metrics utility.",
+          "correct": true,
+          "explanation": "{{t:EMF}} is a JSON log line with an {{code:_aws}} block that declares the namespace, dimensions and metric names. {{t:Lambda}} already ships stdout to {{t:CloudWatch Logs}}, and {{t:CloudWatch}} creates the metrics from the log event: no API call, no added latency, no {{t:IAM}} permission beyond logging, and no per-metric filter. The {{t:Powertools}} decorator flushes the blob once per invocation."
+        }
+      ],
+      "explanation": "In {{t:Lambda}} the lowest-overhead way to emit custom metrics is the {{t:embedded metric format}}: log one structured JSON blob with an {{code:_aws}} metadata block and {{t:CloudWatch}} extracts the metrics asynchronously, with up to 30 dimensions per dimension set. {{code:PutMetricData}} is a synchronous API call that costs latency and has its own throttling; metric filters suit logs you cannot change. Both {{t:EMF}} and {{code:PutMetricData}} support high-resolution metrics ({{code:StorageResolution}} of 1 second) in addition to the standard 1-minute resolution, but high-resolution alarms cost more.",
+      "references": [
+        {
+          "title": "Embedded metric format specification",
+          "url": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Embedded_Metric_Format_Specification.html"
+        },
+        {
+          "title": "Using the embedded metric format with AWS Lambda",
+          "url": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Embedded_Metric_Format_Lambda.html"
+        },
+        {
+          "title": "Publishing custom metrics",
+          "url": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/publishingMetrics.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:431fb961d7a2477e9a59fde1946e3101b913c9f072914f81cdd657ff8150d4aa"
+    },
+    {
+      "id": "dva-c03/observability/0005",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d4",
+      "taskId": "4.1",
+      "services": [
+        "lambda",
+        "kinesis",
+        "cloudwatch"
+      ],
+      "tags": [
+        "lambda-metrics",
+        "kinesis",
+        "iterator-age",
+        "alarms"
+      ],
+      "stem": "An {{t:AWS Lambda}} function consumes clickstream records from an {{t:Amazon Kinesis Data Streams}} stream through an event source mapping and writes aggregates to a dashboard. Analysts report that the dashboard sometimes shows data that is 20 minutes old even though the function reports no errors. The developer wants an {{t:Amazon CloudWatch}} alarm that fires as soon as the function starts falling behind the stream. Which {{t:Lambda}} metric is the BEST basis for the alarm?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "{{code:Duration}} with the p99 statistic, because long invocations mean records are processed late.",
+          "correct": false,
+          "explanation": "Per-invocation duration can stay perfectly normal while a backlog builds up, for example when a shard receives records faster than one batch at a time can drain them. Duration describes the work, not the lag behind the stream."
+        },
+        {
+          "id": "b",
+          "text": "{{code:IteratorAge}} with the Maximum statistic.",
+          "correct": true,
+          "explanation": "For stream event sources, {{code:IteratorAge}} is the age in milliseconds of the last record in a batch when {{t:Lambda}} read it, that is the time between a record arriving in the shard and the function receiving it. A rising Maximum {{code:IteratorAge}} is the direct signal that the consumer is falling behind."
+        },
+        {
+          "id": "c",
+          "text": "{{code:Throttles}} with the Sum statistic.",
+          "correct": false,
+          "explanation": "Throttling is one possible cause of lag, but a stream consumer can fall behind with zero throttles simply because processing is slower than the ingest rate. Throttles is an indirect indicator and would miss that case."
+        },
+        {
+          "id": "d",
+          "text": "{{code:ConcurrentExecutions}} with the Average statistic.",
+          "correct": false,
+          "explanation": "For a {{t:Kinesis}} source, concurrency is bounded by the number of shards multiplied by the parallelization factor and stays flat regardless of backlog, so it does not indicate whether records are being processed late."
+        }
+      ],
+      "explanation": "For stream event sources ({{t:Kinesis Data Streams}}, {{t:DynamoDB Streams}}) the lag metric is {{code:IteratorAge}}; for {{t:Amazon SQS}} sources watch {{code:ApproximateAgeOfOldestMessage}} on the queue instead. Remedies for a high {{code:IteratorAge}} are increasing {{code:ParallelizationFactor}} (up to 10 concurrent batches per shard), adding shards, tuning batch size and batching window, making the function faster, and setting {{code:MaximumRecordAge}} and {{code:BisectBatchOnFunctionError}} so a poison record cannot block the shard. The other default {{t:Lambda}} metrics are {{code:Invocations}}, {{code:Errors}}, {{code:Duration}}, {{code:Throttles}}, {{code:ConcurrentExecutions}} and, for asynchronous invocations, {{code:DeadLetterErrors}}.",
+      "references": [
+        {
+          "title": "Types of metrics for Lambda functions",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/monitoring-metrics-types.html"
+        },
+        {
+          "title": "Using Lambda with Amazon Kinesis Data Streams",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/with-kinesis.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:71a65fabdb62b702cb4f080712d71b44878118eb8266d20137c77236ec15831e"
+    },
+    {
+      "id": "dva-c03/observability/0006",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 2,
+      "domainId": "d4",
+      "taskId": "4.2",
+      "services": [
+        "x-ray",
+        "ecs"
+      ],
+      "tags": [
+        "annotations",
+        "metadata",
+        "sampling",
+        "most-cost-effective"
+      ],
+      "stem": "A developer instruments a containerized order service on {{t:Amazon ECS}} with the {{t:AWS X-Ray}} SDK. Support engineers must be able to search the {{t:X-Ray}} console for all traces that belong to a given customer tier (for example {{code:premium}}) and, when they open a trace, see the full JSON request body that the service received. The service handles about 2,000 requests per second. Which combination of steps will meet these requirements MOST cost-effectively? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Add the customer tier to the segment as an annotation, for example {{code:putAnnotation(\"tier\", \"premium\")}}.",
+          "correct": true,
+          "explanation": "Annotations are simple key-value pairs (string, number or boolean) that {{t:X-Ray}} indexes, so they can be used in filter expressions such as {{code:annotation.tier = \"premium\"}} and in group definitions. A trace can carry up to 50 annotations."
+        },
+        {
+          "id": "b",
+          "text": "Add the customer tier to the segment as metadata and search for it with the filter expression {{code:metadata.tier = \"premium\"}}.",
+          "correct": false,
+          "explanation": "Metadata is stored with the trace but is never indexed, so filter expressions cannot search on it. It is only visible when a single trace is opened, which fails the search requirement."
+        },
+        {
+          "id": "c",
+          "text": "Serialize the request body to a string and add it as an annotation so that it is visible on the trace.",
+          "correct": false,
+          "explanation": "Annotations are meant for a handful of indexed primitives (at most 50 per trace). Indexing a large JSON body is wasteful, may push the segment towards its size limit and does not make it readable; the body belongs in metadata."
+        },
+        {
+          "id": "d",
+          "text": "Create a sampling rule with a reservoir of 1 request per second and a fixed rate of 100% so that no customer request is missed.",
+          "correct": false,
+          "explanation": "At 2,000 requests per second a 100% fixed rate records about 2,000 traces every second, multiplying {{t:X-Ray}} cost and SDK/daemon overhead for very little extra insight. The default rule (first request each second plus 5% of the rest) is statistically sufficient; if one tier truly needs full capture, write a narrow rule for it instead of sampling everything."
+        },
+        {
+          "id": "e",
+          "text": "Attach the request body to the segment as metadata under a namespace such as {{code:request}}.",
+          "correct": true,
+          "explanation": "Metadata accepts any JSON-serializable object, is not indexed (so it adds no search cost) and is displayed in the trace detail view, which is exactly the 'see the body when a trace is opened' requirement."
+        }
+      ],
+      "explanation": "Annotations are indexed, searchable, primitive-typed and limited to 50 per trace, so use them for the few dimensions you filter on (customer tier, tenant, order type). Metadata is not indexed and accepts any JSON, so use it for debugging detail. The default sampling rule records the first request each second plus 5% of additional requests; 100% sampling multiplies cost and overhead, so target a narrow rule when a subset needs full capture. Segment documents are capped at 64 KB, so keep payloads reasonable.",
+      "references": [
+        {
+          "title": "AWS X-Ray concepts (segments, annotations and metadata)",
+          "url": "https://docs.aws.amazon.com/xray/latest/devguide/xray-concepts.html"
+        },
+        {
+          "title": "Configuring sampling rules",
+          "url": "https://docs.aws.amazon.com/xray/latest/devguide/xray-console-sampling.html"
+        },
+        {
+          "title": "Using filter expressions",
+          "url": "https://docs.aws.amazon.com/xray/latest/devguide/xray-console-filters.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:1f3464137a2ecf249f27321c4b573c47cc5f1a74d44218b6a34a1d67dafd7d0e"
+    },
+    {
+      "id": "dva-c03/observability/0007",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d4",
+      "taskId": "4.2",
+      "services": [
+        "lambda",
+        "x-ray",
+        "sam"
+      ],
+      "tags": [
+        "active-tracing",
+        "sam-template",
+        "x-ray-daemon",
+        "fewest-changes"
+      ],
+      "stem": "A developer adds the {{t:AWS X-Ray}} SDK to an {{t:AWS Lambda}} function that is deployed with {{t:AWS SAM}} and wraps the {{t:Amazon DynamoDB}} client from the {{t:AWS SDK}} so that downstream calls are captured. The function is invoked on a schedule by {{t:Amazon EventBridge}}, and its execution role is generated by {{t:SAM}}. After deployment, the {{t:X-Ray}} trace map shows no node for the function at all. Which change will make traces appear with the FEWEST changes?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Add a {{t:Lambda layer}} that contains the {{t:X-Ray daemon}} and start it from the handler so that it listens on UDP port 2000.",
+          "correct": false,
+          "explanation": "On {{t:EC2}} or {{t:ECS}} you do run the daemon yourself (UDP 2000, usually a sidecar), but in {{t:Lambda}} the service runs the daemon inside the execution environment as soon as tracing is Active. Packaging and starting it from a handler is unnecessary and fragile."
+        },
+        {
+          "id": "b",
+          "text": "Set the {{code:AWS_XRAY_DAEMON_ADDRESS}} environment variable to {{code:127.0.0.1:2000}} in the template's {{code:Environment}} section.",
+          "correct": false,
+          "explanation": "{{t:Lambda}} sets {{code:AWS_XRAY_DAEMON_ADDRESS}} itself and supplies the trace header (the {{code:_X_AMZN_TRACE_ID}} variable in most runtimes) when tracing is enabled. Setting the variable by hand neither starts a daemon nor samples the request, and a scheduled {{t:EventBridge}} invocation carries no upstream trace header that PassThrough mode could honour."
+        },
+        {
+          "id": "c",
+          "text": "Set {{code:Tracing: Active}} on the {{code:AWS::Serverless::Function}} resource and redeploy the application.",
+          "correct": true,
+          "explanation": "Active mode makes the {{t:Lambda}} service sample incoming requests, run the daemon in the execution environment, add the trace header and emit the function's own segment; the SDK's subsegments for the {{t:DynamoDB}} call then attach to it. The role needs {{code:xray:PutTraceSegments}} and {{code:xray:PutTelemetryRecords}}; when {{t:SAM}} generates the role it attaches {{code:AWSXrayWriteOnlyAccess}}, and the {{t:Lambda}} console attaches {{code:AWSXRayDaemonWriteAccess}}, both of which grant them."
+        },
+        {
+          "id": "d",
+          "text": "Add {{code:xray:PutTraceSegments}} and {{code:xray:PutTelemetryRecords}} to the role's policies in the template, and call {{code:PutTraceSegments}} directly from the handler with the {{t:X-Ray}} API client.",
+          "correct": false,
+          "explanation": "Uploading segment documents yourself is possible, but you would have to build the segment JSON, manage sampling and the trace header, and you would still not get the {{t:Lambda}} service's own segment. One template property does all of that."
+        }
+      ],
+      "explanation": "The {{t:X-Ray}} SDK only writes subsegments; something must sample the request and create the function's segment. In {{t:Lambda}} that is the tracing configuration {{code:Mode: Active}} ({{t:SAM}} {{code:Tracing: Active}}), which also starts the daemon inside the environment and sets {{code:AWS_XRAY_DAEMON_ADDRESS}} and {{code:_X_AMZN_TRACE_ID}} for you. The default {{code:PassThrough}} mode traces only when the caller already sampled the request, so scheduled or asynchronous invocations produce nothing. The role needs {{code:xray:PutTraceSegments}} and {{code:xray:PutTelemetryRecords}}, supplied by {{code:AWSXRayDaemonWriteAccess}} (what the console attaches) or {{code:AWSXrayWriteOnlyAccess}} (what {{t:SAM}} attaches to a generated role). Outside {{t:Lambda}} ({{t:EC2}}, {{t:ECS}}) you run the daemon yourself on UDP 2000, which is the trap in the layer and environment-variable options.",
+      "references": [
+        {
+          "title": "Visualize Lambda function invocations using AWS X-Ray",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/services-xray.html"
+        },
+        {
+          "title": "AWS::Serverless::Function (Tracing property)",
+          "url": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html"
+        },
+        {
+          "title": "Lambda defined runtime environment variables",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:ecc1a9dd910285d91ed6aa717fbb50925c4981b1814664c0d68923e7c64a6c5c"
+    },
+    {
+      "id": "dva-c03/observability/0008",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 3,
+      "domainId": "d4",
+      "taskId": "4.1",
+      "services": [
+        "api-gateway",
+        "lambda",
+        "x-ray",
+        "cloudwatch",
+        "dynamodb"
+      ],
+      "tags": [
+        "latency",
+        "p99",
+        "service-map",
+        "subsegments",
+        "fewest-code-changes"
+      ],
+      "stem": "A REST API built with {{t:Amazon API Gateway}} and {{t:AWS Lambda}} reads from {{t:Amazon DynamoDB}} and calls a third-party fraud-scoring API over HTTPS. Customers complain about occasional slow checkouts. In {{t:Amazon CloudWatch}} the average {{code:Duration}} is 180 ms, but the p99 is 6 seconds, and the {{t:API Gateway}} {{code:IntegrationLatency}} p99 matches it. The developer must determine which downstream call is responsible for the slow requests. Which approach will identify the slow dependency with the FEWEST code changes?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Log a timestamp before and after every downstream call, write the differences to structured log lines, and run a {{t:CloudWatch Logs Insights}} query with {{code:stats pct(elapsed, 99) by step}}.",
+          "correct": false,
+          "explanation": "This works and is precise, but it means hand-written timing code around every call in every code path, kept in sync as the code evolves. {{t:X-Ray}} gives the same per-call breakdown with a one-line patch per client, so under 'fewest code changes' it loses."
+        },
+        {
+          "id": "b",
+          "text": "Enable active tracing on the {{t:API Gateway}} stage and the function, capture the {{t:AWS SDK}} and HTTPS clients with the {{t:AWS X-Ray}} SDK, and filter traces with {{code:responsetime > 5}}.",
+          "correct": true,
+          "explanation": "Capturing the {{t:AWS SDK}} client (for example {{code:captureAWSv3Client}} or {{code:patch_all}}) and the HTTP client ({{code:captureHTTPsGlobal}}) creates a timed subsegment for every {{t:DynamoDB}} and fraud-API call. A filter expression isolates the slow traces, the timeline shows which subsegment holds the 6 seconds, and the trace map shows per-node latency and faults."
+        },
+        {
+          "id": "c",
+          "text": "Enable {{t:AWS CloudTrail}} data events for the function and the table so that the duration of each {{code:Invoke}} and {{code:GetItem}} call is recorded.",
+          "correct": false,
+          "explanation": "{{t:CloudTrail}} is an audit log: it records which principal made which API call and when. It does not record elapsed time for downstream calls and never sees the third-party HTTPS request at all, so it cannot locate a latency problem."
+        },
+        {
+          "id": "d",
+          "text": "Increase the function's memory to 3,008 MB, configure provisioned concurrency equal to the peak concurrency, and compare the p99 of {{code:Duration}} before and after the change to confirm that cold starts caused the slow requests.",
+          "correct": false,
+          "explanation": "This is an optimization guess before a diagnosis. More memory helps CPU-bound code and provisioned concurrency removes cold starts, which rarely explain a 6-second tail; a slow external API or a hot {{t:DynamoDB}} partition would be unaffected while the bill rises."
+        }
+      ],
+      "explanation": "'Which hop is slow?' is an {{t:AWS X-Ray}} question: enable active tracing on the {{t:API Gateway}} stage and the function, instrument the clients so each outbound call becomes a timed subsegment, then read the trace timeline and trace map (also shown in the {{t:CloudWatch}} console). {{t:CloudWatch}} metrics such as the p99 of {{code:Duration}}, {{code:Latency}} and {{code:IntegrationLatency}} tell you that there is a tail-latency problem; {{t:CloudWatch Logs}} tell you what the code printed; {{t:CloudTrail}} tells you who called which AWS API. Only after {{t:X-Ray}} names the culprit do you optimize: {{t:Lambda Power Tuning}} for memory and CPU, provisioned concurrency for cold starts, {{t:DAX}} or caching for {{t:DynamoDB}}, and timeouts with retries for third-party APIs.",
+      "references": [
+        {
+          "title": "Amazon API Gateway active tracing support for AWS X-Ray",
+          "url": "https://docs.aws.amazon.com/xray/latest/devguide/xray-services-apigateway.html"
+        },
+        {
+          "title": "Using filter expressions",
+          "url": "https://docs.aws.amazon.com/xray/latest/devguide/xray-console-filters.html"
+        },
+        {
+          "title": "Amazon API Gateway dimensions and metrics",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-metrics-and-dimensions.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:8a05a830e5f4502d3c8af5e44b8c5e10fc79523611cdd6945c57bd74768b836f"
+    },
+    {
+      "id": "dva-c03/observability/0009",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d4",
+      "taskId": "4.1",
+      "services": [
+        "cloudtrail",
+        "s3"
+      ],
+      "tags": [
+        "cloudtrail",
+        "data-events",
+        "audit",
+        "least-ops-overhead"
+      ],
+      "stem": "A developer discovers that several objects were deleted from an {{t:Amazon S3}} bucket during the night. The account has no trail configured. The developer searches the {{t:AWS CloudTrail}} event history for {{code:DeleteObject}} events in the right time window and finds none, although a {{code:DeleteTable}} call from the previous week is listed. The team must be able to identify the {{t:IAM}} principal behind any future object deletions in this bucket. Which solution meets this requirement with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Search event history again with the full 90-day range and the {{code:Resource name}} attribute set to the bucket, because object deletions are retained for 90 days like other API calls.",
+          "correct": false,
+          "explanation": "Event history keeps 90 days of management events only. {{t:S3}} object-level calls such as {{code:DeleteObject}} are data events and never appear in event history, whatever time range you search."
+        },
+        {
+          "id": "b",
+          "text": "Run a {{t:CloudWatch Logs Insights}} query against the application's log group that filters for {{code:DeleteObject}} calls and groups them by the caller's identity.",
+          "correct": false,
+          "explanation": "Application logs show only the deletions the application itself made and chose to log. A principal using the console, the CLI or another service leaves nothing in the application's log group."
+        },
+        {
+          "id": "c",
+          "text": "Enable {{t:AWS X-Ray}} active tracing in the application and search traces for calls to the bucket.",
+          "correct": false,
+          "explanation": "{{t:X-Ray}} records sampled traces of the instrumented application's own requests. It carries no identity of other principals and no coverage of console or CLI actions, so it cannot attribute a deletion."
+        },
+        {
+          "id": "d",
+          "text": "Create a trail that logs {{t:S3}} data events for the bucket and delivers them to a separate {{t:S3}} bucket.",
+          "correct": true,
+          "explanation": "Data events ({{t:S3}} object-level operations, {{t:Lambda}} {{code:Invoke}}, {{t:DynamoDB}} item-level operations) are off by default and cost extra, but once enabled on a trail or event data store every {{code:DeleteObject}} record includes {{code:userIdentity}}, source IP, time and request parameters. Advanced event selectors limit logging to this one bucket to control cost."
+        }
+      ],
+      "explanation": "{{t:CloudTrail}} event history is a free, searchable record of the last 90 days of management (control-plane) events such as {{code:CreateTable}}, {{code:DeleteTable}} or {{code:RunInstances}}. Data events ({{code:GetObject}}, {{code:PutObject}}, {{code:DeleteObject}}, {{t:Lambda}} {{code:Invoke}}, {{t:DynamoDB}} {{code:GetItem}} and {{code:PutItem}}) are not in event history; you must opt in on a trail or {{t:CloudTrail Lake}} store, and logging starts only from then on. 'Who deleted the table or function' means event history; 'who deleted the object or invoked the function' means data events on a trail. Neither records latency or application errors, which are {{t:X-Ray}} and {{t:CloudWatch Logs}} questions.",
+      "references": [
+        {
+          "title": "Working with CloudTrail Event history",
+          "url": "https://docs.aws.amazon.com/awscloudtrail/latest/userguide/view-cloudtrail-events.html"
+        },
+        {
+          "title": "Logging data events",
+          "url": "https://docs.aws.amazon.com/awscloudtrail/latest/userguide/logging-data-events-with-cloudtrail.html"
+        },
+        {
+          "title": "Logging management events",
+          "url": "https://docs.aws.amazon.com/awscloudtrail/latest/userguide/logging-management-events-with-cloudtrail.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:fb097b71afb7ac06cac07663b1a20b3f1cc836f873bdc0daefc8ba9b63d5c682"
+    },
+    {
+      "id": "dva-c03/observability/0010",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 3,
+      "domainId": "d4",
+      "taskId": "4.3",
+      "services": [
+        "lambda"
+      ],
+      "tags": [
+        "rds-proxy",
+        "connection-pooling",
+        "execution-environment-reuse",
+        "optimization"
+      ],
+      "stem": "A developer's {{t:AWS Lambda}} function, written in Node.js, connects to an {{t:Amazon RDS for MySQL}} database and creates a new database connection inside the handler on every invocation. During a marketing campaign, concurrency rises to 800 and the function begins failing with {{code:ER_CON_COUNT_ERROR: Too many connections}} while the database CPU stays below 20%. The developer must stop the connection errors while allowing the function to keep scaling with traffic. Which combination of changes will MOST effectively meet these requirements? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Create an {{t:Amazon RDS Proxy}} for the database, grant the function access to it, and connect to the proxy endpoint instead of the database endpoint.",
+          "correct": true,
+          "explanation": "{{t:RDS Proxy}} keeps a warm pool of database connections and multiplexes many short-lived {{t:Lambda}} connections onto it, so hundreds of concurrent environments no longer map to hundreds of database connections. It also supports {{t:IAM}} authentication, {{t:Secrets Manager}} credentials and faster failover."
+        },
+        {
+          "id": "b",
+          "text": "Configure provisioned concurrency of 800 so that the connections are opened during initialization instead of inside the handler.",
+          "correct": false,
+          "explanation": "Provisioned concurrency pre-initializes 800 environments, each of which would still hold its own connection, so the database limit is reached before any traffic arrives and the cost rises. It addresses cold-start latency, not connection counts."
+        },
+        {
+          "id": "c",
+          "text": "Increase the function's memory to 10,240 MB so that each invocation finishes faster and releases its connection sooner.",
+          "correct": false,
+          "explanation": "Memory scales CPU, but this function waits on database round trips rather than computing, and the number of simultaneous connections equals the concurrency regardless of how long each invocation runs. It also multiplies the cost per invocation."
+        },
+        {
+          "id": "d",
+          "text": "Move the connection setup out of the handler into the module scope so that each execution environment reuses one connection across invocations.",
+          "correct": true,
+          "explanation": "Code outside the handler runs once per execution environment and persists while it is warm, so the connection (like an {{t:AWS SDK}} client) is reused instead of opened and torn down per invocation. This removes handshake latency and connection churn, and pairs with the proxy to keep the total low."
+        },
+        {
+          "id": "e",
+          "text": "Catch the error in the handler, wait with exponential backoff and jitter, and retry the connection up to five times.",
+          "correct": false,
+          "explanation": "Backoff helps with transient throttling, but here the connection limit is saturated by design. Retrying holds the invocation (and its billing) open while the pool stays full, converting fast failures into slow timeouts under sustained load."
+        }
+      ],
+      "explanation": "The {{t:Lambda}} scaling model, one connection per concurrent execution environment, collides with a relational database's fixed {{code:max_connections}}. Fix both sides: pool at the database side with {{t:Amazon RDS Proxy}} (multiplexing, {{t:IAM}} auth, {{t:Secrets Manager}}, faster failover), and reuse at the function side by initializing clients outside the handler. Provisioned concurrency and memory tune latency, not connection counts; a reserved-concurrency cap would bound connections but also throughput. The same 'client outside the handler' rule gives {{t:AWS SDK}} clients TCP keep-alive and connection reuse.",
+      "references": [
+        {
+          "title": "Using Amazon RDS Proxy",
+          "url": "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy.html"
+        },
+        {
+          "title": "Best practices for working with AWS Lambda functions",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/best-practices.html"
+        },
+        {
+          "title": "Understanding the Lambda execution environment lifecycle",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtime-environment.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:f1765a4919dbfe8358450d4184687eb9ffb7c874f16237e8b374bf0b8c47a829"
+    },
+    {
+      "id": "dva-c03/observability/0011",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d4",
+      "taskId": "4.3",
+      "services": [
+        "api-gateway",
+        "lambda",
+        "dynamodb",
+        "cloudfront",
+        "dax",
+        "elasticache"
+      ],
+      "tags": [
+        "caching",
+        "api-gateway-cache",
+        "ttl",
+        "least-ops-overhead"
+      ],
+      "stem": "A product catalog REST API runs on {{t:Amazon API Gateway}} with {{t:AWS Lambda}} integrations that read from {{t:Amazon DynamoDB}}. Analysis shows that 90% of traffic is repeated GET requests for the same few hundred product IDs, and product data changes at most once per hour. The developer must cut {{t:DynamoDB}} read costs and lower response latency for the existing API URL without changing application code. Which solution meets these requirements with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Enable caching on the API stage with a TTL of 3,600 seconds and mark the product ID path parameter as a cache key.",
+          "correct": true,
+          "explanation": "The {{t:API Gateway}} stage cache (REST APIs only) stores integration responses for the TTL, default 300 seconds and at most 3,600, in a cache of 0.5 GB to 237 GB. Cache hits never reach {{t:Lambda}} or {{t:DynamoDB}} and return faster; path, query and header parameters declared as cache keys get separate entries, and a client that is allowed {{code:execute-api:InvalidateCache}} can invalidate an entry (forcing a fresh fetch from the integration) by sending {{code:Cache-Control: max-age=0}}."
+        },
+        {
+          "id": "b",
+          "text": "Put an {{t:Amazon CloudFront}} distribution in front of the API, create a cache policy with a 3,600-second TTL, and point clients at the distribution's domain name.",
+          "correct": false,
+          "explanation": "This works and caches at the edge, but it adds a distribution, a cache policy that must forward the right headers and query strings, and a new URL or DNS change for clients. For a single-Region API that only needs response caching, it is more moving parts than a stage cache."
+        },
+        {
+          "id": "c",
+          "text": "Create a {{t:DynamoDB Accelerator}} cluster and change the function to read through the {{t:DAX}} client.",
+          "correct": false,
+          "explanation": "{{t:DAX}} cuts {{t:DynamoDB}} reads with microsecond latency, but it requires a code change to the {{t:DAX}} client, a {{t:VPC}}-connected function and cluster sizing. The requirement forbids code changes, so it cannot be the answer here."
+        },
+        {
+          "id": "d",
+          "text": "Deploy an {{t:Amazon ElastiCache}} cluster with the {{t:Redis}} engine and implement lazy loading in the function with a one-hour TTL.",
+          "correct": false,
+          "explanation": "Cache-aside logic in the function is code that must be written and maintained, plus {{t:VPC}} connectivity. {{t:ElastiCache}} is the right choice when the application needs a cache across many code paths or data sources, not for caching whole responses of a REST API."
+        }
+      ],
+      "explanation": "Rule of thumb for caching layers: cache the whole HTTP response as close to the client as possible with no code, using the {{t:API Gateway}} stage cache (REST APIs only; TTL 0 to 3,600 seconds, default 300; sizes 0.5 GB to 237 GB, billed hourly) or {{t:Amazon CloudFront}} (edge caching driven by TTLs and {{code:Cache-Control}} headers, with cache keys built from selected headers and query strings). Cache data inside the application when you need it across code paths: {{t:DAX}} for {{t:DynamoDB}} with an API-compatible read-through and write-through client, or {{t:Amazon ElastiCache}} with lazy loading or write-through plus a TTL ({{t:Redis}} for persistence, pub/sub and sorted sets; {{t:Memcached}} for a simple multithreaded cache).",
+      "references": [
+        {
+          "title": "Enabling API caching to enhance responsiveness",
+          "url": "https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-caching.html"
+        },
+        {
+          "title": "Caching strategies (ElastiCache)",
+          "url": "https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/Strategies.html"
+        },
+        {
+          "title": "In-memory acceleration with DynamoDB Accelerator (DAX)",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DAX.html"
+        },
+        {
+          "title": "Managing how long content stays in the cache (CloudFront)",
+          "url": "https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Expiration.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:d741053400a8b802caf289a4b02e95386fb5135760d6ccbc772ce8cacc394390"
+    }
+  ]
+}

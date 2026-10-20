@@ -1,0 +1,768 @@
+{
+  "schemaVersion": 1,
+  "courseId": "dva-c03",
+  "sectionId": "lambda",
+  "title": "AWS Lambda",
+  "questions": [
+    {
+      "id": "dva-c03/lambda/0001",
+      "revision": 1,
+      "changeKind": "cosmetic",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d1",
+      "taskId": "1.2",
+      "services": [
+        "lambda",
+        "s3"
+      ],
+      "tags": [
+        "invocation-models",
+        "async",
+        "retries",
+        "idempotency"
+      ],
+      "stem": "A developer owns an {{t:AWS Lambda}} function that is triggered by {{t:Amazon S3}} event notifications whenever a report file is uploaded to a bucket. During a 2-minute outage of a downstream HTTP API, every invocation ended with an unhandled exception. A few minutes after the outage was over, the developer noticed that the same uploads had been processed again, although nobody re-uploaded the files or invoked the function manually. Which statement explains this behavior?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "{{t:S3}} invokes the function synchronously and re-sends the same event every 30 seconds until the function returns without an error.",
+          "correct": false,
+          "explanation": "{{t:S3}} event notifications are an asynchronous event source, and synchronous invokers such as {{t:API Gateway}} or {{code:aws lambda invoke}} do not retry at all: the caller receives the error and must decide what to do. There is no 30-second resend loop in {{t:S3}}."
+        },
+        {
+          "id": "b",
+          "text": "The function is connected to the bucket through an event source mapping, which polls the bucket and retries the whole batch until the records expire.",
+          "correct": false,
+          "explanation": "Event source mappings exist only for poll-based sources such as {{t:Amazon SQS}}, {{t:Amazon Kinesis}}, {{t:DynamoDB Streams}} and {{t:Amazon MSK}}. {{t:S3}} does not expose a stream that can be polled; it pushes each notification to {{t:Lambda}} directly."
+        },
+        {
+          "id": "c",
+          "text": "{{t:S3}} invokes the function asynchronously; {{t:Lambda}} queued each event and, when the function returned an error, retried it up to two more times with a delay between attempts.",
+          "correct": true,
+          "explanation": "For asynchronous invocations {{t:Lambda}} returns HTTP 202 to the event source, queues the event, and on a function error retries it twice by default: about one minute after the first attempt and about two minutes after the second. The retries that landed after the outage succeeded, so the same objects were processed a second time."
+        },
+        {
+          "id": "d",
+          "text": "The function's {{t:reserved concurrency}} was exhausted, so {{t:S3}} buffered the events itself and re-sent them when capacity became available.",
+          "correct": false,
+          "explanation": "Throttling would show up in the {{code:Throttles}} metric in {{t:Amazon CloudWatch}} rather than as exceptions in the logs, and even then it is the asynchronous queue inside {{t:Lambda}}, not {{t:S3}}, that holds throttled events and keeps retrying them for up to six hours."
+        }
+      ],
+      "explanation": "Remember the three invocation models and who owns the retry. Synchronous ({{t:API Gateway}}, {{t:Application Load Balancer}}, {{code:aws lambda invoke}}): no automatic retry, the caller gets the error. Asynchronous ({{t:S3}}, {{t:Amazon SNS}}, {{t:Amazon EventBridge}}): {{t:Lambda}} queues the event and retries function errors twice by default ({{code:MaximumRetryAttempts}} 0 to 2, {{code:MaximumEventAgeInSeconds}} 60 seconds to 6 hours). Poll-based ({{t:SQS}}, {{t:Kinesis}}, {{t:DynamoDB Streams}}): the event source mapping retries by batch. Because asynchronous retries can deliver the same event more than once, handlers behind {{t:S3}}, {{t:SNS}} or {{t:EventBridge}} triggers must be idempotent, for example by recording a processed-event key with a conditional write in {{t:Amazon DynamoDB}} or by using the idempotency utility in {{t:Powertools for AWS Lambda}}.",
+      "references": [
+        {
+          "title": "Invoking a Lambda function asynchronously",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/invocation-async.html"
+        },
+        {
+          "title": "Understanding retry behavior in Lambda",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/invocation-retries.html"
+        },
+        {
+          "title": "Using Lambda with Amazon S3",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/with-s3.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:ef5564aa3522a6c55fa76e5844bee70540b6fd59123675efa8864a62c0cc928c"
+    },
+    {
+      "id": "dva-c03/lambda/0002",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.2",
+      "services": [
+        "lambda",
+        "eventbridge",
+        "sqs"
+      ],
+      "tags": [
+        "destinations",
+        "dlq",
+        "async",
+        "auditing",
+        "least-effort"
+      ],
+      "stem": "An order-processing {{t:AWS Lambda}} function is invoked asynchronously by an {{t:Amazon EventBridge}} rule. The compliance team has two requirements: a record of every successfully processed event, including the function's response payload, must be delivered to an {{t:Amazon SQS}} audit queue, and any event that still fails after all automatic retries must be delivered to a separate {{t:SQS}} queue together with the error the function returned and the number of attempts that were made. The developer is not allowed to change the function code. Which combination of steps will meet these requirements with the LEAST development effort? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Configure an on-success destination on the function's asynchronous invocation configuration that targets the audit queue.",
+          "correct": true,
+          "explanation": "Destinations are a feature of asynchronous invocation. An on-success destination delivers an invocation record containing {{code:requestPayload}}, {{code:responsePayload}} and {{code:requestContext}} to {{t:SQS}}, {{t:Amazon SNS}}, another {{t:Lambda}} function or {{t:EventBridge}} after each successful attempt, with no change to the handler."
+        },
+        {
+          "id": "b",
+          "text": "Configure a {{t:dead-letter queue}} on the function that targets the audit queue.",
+          "correct": false,
+          "explanation": "The function-level dead-letter queue receives only events that failed every retry; successful invocations are never written to it, so it cannot produce an audit record. It also carries just the original event plus {{code:RequestID}}, {{code:ErrorCode}} and {{code:ErrorMessage}} message attributes, not the attempt count."
+        },
+        {
+          "id": "c",
+          "text": "Configure an on-failure destination on the function's asynchronous invocation configuration that targets the failure queue.",
+          "correct": true,
+          "explanation": "The on-failure invocation record includes the original event, the error in {{code:responsePayload}}, and a {{code:requestContext}} with {{code:condition}} (for example {{code:RetriesExhausted}}) and {{code:approximateInvokeCount}}, which is exactly the error detail and attempt count the compliance team asked for."
+        },
+        {
+          "id": "d",
+          "text": "Wrap the handler in a try/except block that publishes the response to the audit queue on success and the exception to the failure queue on error.",
+          "correct": false,
+          "explanation": "This violates the no-code-change constraint and is more work than enabling two settings. Catching and swallowing the exception would also stop {{t:Lambda}} from retrying the event at all, silently changing the function's error semantics."
+        },
+        {
+          "id": "e",
+          "text": "Configure a {{t:dead-letter queue}} on the {{t:EventBridge}} rule target so that failed events are sent to the failure queue.",
+          "correct": false,
+          "explanation": "An {{t:EventBridge}} target dead-letter queue stores events that {{t:EventBridge}} could not hand to {{t:Lambda}}, for example because of a missing resource-based policy or sustained throttling. Once {{t:Lambda}} has accepted the event with HTTP 202, later function errors are handled by the retry and destination settings of {{t:Lambda}}, so this queue would stay empty."
+        }
+      ],
+      "explanation": "{{t:Lambda destinations}} and the function dead-letter queue both apply only to asynchronous invocations, but they are not equivalent. The DLQ is failure-only and forwards little more than the event; destinations cover both success and failure, send a full invocation record (request, response, condition, attempt count) and can target {{t:SQS}}, {{t:SNS}}, {{t:Lambda}} or {{t:EventBridge}} (plus {{t:Amazon S3}} for on-failure). Because an on-failure destination does everything the DLQ setting does and more, prefer destinations for new work. For poll-based sources use the queue's own redrive policy ({{t:SQS}}) or the on-failure destination of a stream event source mapping ({{t:Kinesis}}, {{t:DynamoDB Streams}}) instead.",
+      "references": [
+        {
+          "title": "Invoking a Lambda function asynchronously – destinations and dead-letter queues",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/invocation-async.html"
+        },
+        {
+          "title": "Using dead-letter queues to process undelivered events in EventBridge",
+          "url": "https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-rule-dlq.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:58d350caee07e3503233d33eaf216d54c549769a731c4468d87835cf6462c4f1"
+    },
+    {
+      "id": "dva-c03/lambda/0003",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.2",
+      "services": [
+        "lambda",
+        "api-gateway",
+        "cloudwatch"
+      ],
+      "tags": [
+        "concurrency",
+        "throttling",
+        "reserved-concurrency",
+        "most-cost-effective"
+      ],
+      "stem": "A company runs many {{t:AWS Lambda}} functions in a single AWS Region, including a checkout function that is integrated with {{t:Amazon API Gateway}}. During a flash sale the integration starts failing, and the {{t:API Gateway}} execution logs show HTTP 429 {{code:TooManyRequestsException}} errors returned by {{t:Lambda}}. In {{t:Amazon CloudWatch}} the {{code:Throttles}} metric is non-zero for the checkout function and also for an unrelated nightly batch function that happened to be running, and the account-level {{code:ConcurrentExecutions}} metric reached the default Regional quota of 1,000. The developer wants the checkout function to always have 300 concurrent executions available to it, no matter what other functions in the account are doing, and does not want to pay for idle capacity. Which action will meet these requirements MOST cost-effectively?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Configure {{t:provisioned concurrency}} of 300 on the checkout function's production alias.",
+          "correct": false,
+          "explanation": "Provisioned concurrency would dedicate 300 pre-initialized execution environments to the function, so it does solve the availability problem, but it is billed for every second it is allocated whether or not requests arrive. The requirement to avoid paying for idle capacity rules it out."
+        },
+        {
+          "id": "b",
+          "text": "Configure {{t:reserved concurrency}} of 300 on the checkout function.",
+          "correct": true,
+          "explanation": "Reserved concurrency carves 300 units out of the account's Regional pool exclusively for this function at no charge; other functions can only consume what remains. It is also a hard ceiling: the checkout function itself is throttled above 300, so the number must be chosen carefully."
+        },
+        {
+          "id": "c",
+          "text": "Increase the checkout function's memory to 3,008 MB so that each invocation finishes faster and consumes less concurrency.",
+          "correct": false,
+          "explanation": "More memory brings proportionally more CPU and may shorten durations, which lowers concurrency usage because concurrency equals request rate multiplied by duration. It gives no guarantee, however: the batch function can still exhaust the shared pool, and the per-millisecond price goes up."
+        },
+        {
+          "id": "d",
+          "text": "Configure a usage plan on the {{t:API Gateway}} stage that throttles clients to 300 requests per second.",
+          "correct": false,
+          "explanation": "Stage or usage-plan throttling limits how much traffic reaches the function; it does not set aside any {{t:Lambda}} capacity. If the nightly batch function has taken all 1,000 units, the checkout function is still throttled even at a low request rate."
+        }
+      ],
+      "explanation": "Reserved concurrency is free and does two things at once: it guarantees that a function can always scale up to that level and it caps the function there. It is taken out of the account's default 1,000 concurrent executions per Region (raise the quota through {{t:Service Quotas}}), and at least 100 units always remain unreserved for the other functions. Provisioned concurrency also dedicates capacity, but it is billed continuously and exists to remove cold starts. A throttled synchronous invocation returns HTTP 429 {{code:TooManyRequestsException}} immediately and is not retried by {{t:Lambda}}; the client must back off and retry.",
+      "references": [
+        {
+          "title": "Configuring reserved concurrency for a function",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/configuration-concurrency.html"
+        },
+        {
+          "title": "Understanding Lambda function scaling",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/lambda-concurrency.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:58c902fca3ca6cc80c24af89f1b66fb7bad768346c5d31bdede2e72f50694ecd"
+    },
+    {
+      "id": "dva-c03/lambda/0004",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 3,
+      "domainId": "d1",
+      "taskId": "1.2",
+      "services": [
+        "lambda",
+        "api-gateway"
+      ],
+      "tags": [
+        "cold-start",
+        "snapstart",
+        "provisioned-concurrency",
+        "least-cost"
+      ],
+      "stem": "A developer maintains a Java 21 {{t:AWS Lambda}} function that bootstraps a dependency-injection framework at startup and is invoked by {{t:Amazon API Gateway}}. {{t:Amazon CloudWatch}} logs show an {{code:Init Duration}} of 5 to 7 seconds on cold starts, while warm invocations complete in about 60 ms. Traffic is bursty and hard to predict, and users complain about occasional very slow responses. The developer wants to reduce cold-start latency at the LEAST additional cost. What should the developer do?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Configure {{t:provisioned concurrency}} on the function's production alias at the expected peak concurrency.",
+          "correct": false,
+          "explanation": "Provisioned concurrency removes cold starts for the environments it keeps initialized, but it is billed for the entire time it is allocated. With bursty, unpredictable traffic the developer must either over-provision and pay for idle environments or accept that requests above the provisioned level still hit cold starts."
+        },
+        {
+          "id": "b",
+          "text": "Increase the function's memory to 10,240 MB so that the additional vCPUs shorten the framework initialization on every cold start.",
+          "correct": false,
+          "explanation": "CPU scales with memory, so the framework may initialize somewhat faster, but the per-millisecond price scales with memory, so every invocation, warm ones included, becomes several times more expensive, and the expensive initialization still runs on every cold start."
+        },
+        {
+          "id": "c",
+          "text": "Create an {{t:Amazon EventBridge}} scheduled rule that invokes the function every 5 minutes to keep an execution environment warm.",
+          "correct": false,
+          "explanation": "A keep-alive ping keeps at most one execution environment warm. A burst that needs 20 concurrent environments still triggers 19 cold starts, {{t:Lambda}} may recycle the environment anyway, and the extra invocations add cost and log noise."
+        },
+        {
+          "id": "d",
+          "text": "Enable {{t:Lambda SnapStart}} on the function, publish a new version, and point the {{t:API Gateway}} integration at an alias of that version.",
+          "correct": true,
+          "explanation": "{{t:SnapStart}} runs the initialization once when the version is published, takes an encrypted snapshot of the initialized execution environment, and resumes new environments from that cached snapshot instead of re-running the framework bootstrap, which typically cuts Java cold starts from seconds to well under a second. It works only on published versions, and for Java runtimes there is no additional charge."
+        }
+      ],
+      "explanation": "Cold-start latency is the Init phase of a new execution environment. The options are {{t:SnapStart}} (Java, Python and .NET managed runtimes, published versions only, no extra charge for Java), {{t:provisioned concurrency}} (any runtime, pre-initialized environments billed continuously), more memory (more CPU per environment at a higher per-millisecond price) and slimmer code or lazy loading. The distinguishing fact here is cost: both {{t:SnapStart}} and provisioned concurrency fix Java cold starts, but only one of them is free. Remember that {{t:SnapStart}} cannot be combined with provisioned concurrency, {{t:Amazon EFS}} or ephemeral storage above 512 MB, and that code relying on randomness or open connections should use runtime hooks to re-initialize after a restore.",
+      "references": [
+        {
+          "title": "Improving startup performance with Lambda SnapStart",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/snapstart.html"
+        },
+        {
+          "title": "Configuring provisioned concurrency for a function",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/provisioned-concurrency.html"
+        },
+        {
+          "title": "Configure Lambda function memory",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/configuration-memory.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:e7b9145a357d3367427d65cf3cad80061f0391a9a26f033e8f20b4d5734d5ab3"
+    },
+    {
+      "id": "dva-c03/lambda/0005",
+      "revision": 1,
+      "changeKind": "cosmetic",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 1,
+      "domainId": "d1",
+      "taskId": "1.2",
+      "services": [
+        "lambda",
+        "s3"
+      ],
+      "tags": [
+        "deployment-package",
+        "limits",
+        "ephemeral-storage",
+        "tmp"
+      ],
+      "stem": "A developer is deploying a Python {{t:AWS Lambda}} function that transcodes uploaded video files. The .zip deployment package, which bundles several native libraries, is 60 MB compressed and 180 MB uncompressed. During each invocation the function must write up to 4 GB of intermediate files to local disk. When the developer tries to upload the .zip file directly through the {{t:Lambda}} console, the upload is rejected because the file is too large. Which combination of steps will allow the function to be deployed and to run successfully with the LEAST effort? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Increase the function's memory to 10,240 MB so that the {{code:/tmp}} directory grows automatically.",
+          "correct": false,
+          "explanation": "Memory controls RAM and the proportional CPU share; it has no effect on {{code:/tmp}}. Ephemeral storage is a separate {{code:EphemeralStorage}} setting, so a function with 10 GB of memory still has only the default 512 MB of {{code:/tmp}} and would fail when writing 4 GB."
+        },
+        {
+          "id": "b",
+          "text": "Upload the .zip file to an {{t:Amazon S3}} bucket in the same Region and create the function from that S3 object.",
+          "correct": true,
+          "explanation": "Direct uploads from the console or through an inline {{code:--zip-file}} parameter are limited to 50 MB. Deploying from {{t:S3}} lets you use any package whose unzipped size, including layers, stays within 250 MB, which a 180 MB package does."
+        },
+        {
+          "id": "c",
+          "text": "Split the native libraries across several {{t:Lambda layers}} so that the combined unzipped size may exceed 250 MB.",
+          "correct": false,
+          "explanation": "The 250 MB unzipped quota applies to the function code plus all of its layers together, and a function can use at most 5 layers, so splitting does not raise the ceiling. Here the package is already within that limit; the blocker is the 50 MB direct-upload limit."
+        },
+        {
+          "id": "d",
+          "text": "Attach an {{t:Amazon EBS}} volume to the function to use as scratch space.",
+          "correct": false,
+          "explanation": "{{t:Lambda}} functions cannot mount {{t:EBS}} volumes. The only options for local scratch space are {{code:/tmp}} ephemeral storage and, for shared or persistent data, an {{t:Amazon EFS}} file system mounted through a VPC configuration, which is far more setup."
+        },
+        {
+          "id": "e",
+          "text": "Set the function's ephemeral storage ({{code:/tmp}}) size to at least 4,096 MB.",
+          "correct": true,
+          "explanation": "Ephemeral storage defaults to 512 MB and can be configured up to 10,240 MB per function; only the amount above 512 MB is charged, per GB-second. 4,096 MB gives the transcoder the scratch space it needs without any code change."
+        }
+      ],
+      "explanation": "Know the {{t:Lambda}} packaging numbers: 50 MB for a zipped package uploaded directly, 250 MB unzipped for code plus layers (upload through {{t:S3}} to reach it), 3 MB for the console code editor, and up to 10 GB for a container image when you need more. Storage and compute are separate knobs: memory 128 MB to 10,240 MB (CPU scales with it), {{code:/tmp}} 512 MB to 10,240 MB, and a maximum timeout of 15 minutes. The closest distractor confuses memory with {{code:/tmp}}; they are independent settings.",
+      "references": [
+        {
+          "title": "Lambda quotas",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html"
+        },
+        {
+          "title": "Configuring ephemeral storage (console)",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/configuration-ephemeral-storage.html"
+        },
+        {
+          "title": "Deploying Lambda functions as .zip file archives",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/configuration-function-zip.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:ec1bcb3a751f0a4244f11509c977ede8b5c5025cadedf07115c3d7cdfdbc8541"
+    },
+    {
+      "id": "dva-c03/lambda/0006",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 1,
+      "domainId": "d1",
+      "taskId": "1.2",
+      "services": [
+        "lambda"
+      ],
+      "tags": [
+        "layers",
+        "code-reuse",
+        "fewest-changes"
+      ],
+      "stem": "A team maintains eight Node.js {{t:AWS Lambda}} functions, deployed as .zip packages, that all import the same internal utility modules and the same 20 MB third-party SDK. Every time the shared code changes, developers must rebuild and redeploy all eight deployment packages. The team wants to share the common code across the functions and update it in a single place with the FEWEST changes to the handler code. What should the developer do?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Place the shared modules under a {{code:nodejs/node_modules}} folder, publish the archive as a {{t:Lambda layer}}, and attach it to each function.",
+          "correct": true,
+          "explanation": "{{t:Lambda}} extracts every layer into {{code:/opt}} in the execution environment, and for Node.js the path {{code:/opt/nodejs/node_modules}} is already on {{code:NODE_PATH}}, so existing {{code:require}} statements resolve without edits. Updating the shared code becomes publishing a new layer version and pointing the functions at it."
+        },
+        {
+          "id": "b",
+          "text": "Store the shared modules in an {{t:Amazon S3}} bucket and download them into {{code:/tmp}} at the start of every invocation.",
+          "correct": false,
+          "explanation": "This adds an {{t:S3}} download and its latency to every invocation (or at best every cold start), needs new bootstrap code in all eight handlers, and still gives no versioning of the shared code."
+        },
+        {
+          "id": "c",
+          "text": "Rebuild all eight functions as container images that extend a shared base image stored in {{t:Amazon ECR}}.",
+          "correct": false,
+          "explanation": "A shared base image is the right pattern for image-based functions, which cannot use layers, but converting eight .zip functions to container images changes the build, deployment and runtime configuration of every function; it is far from the fewest changes."
+        },
+        {
+          "id": "d",
+          "text": "Put the shared modules on an {{t:Amazon EFS}} file system, mount it to each function, and import the modules from the mount path.",
+          "correct": false,
+          "explanation": "{{t:EFS}} requires attaching every function to a VPC, creating mount targets and an access point, and changing the module import paths to the mount location. It solves sharing but with much more operational and code change than a layer."
+        }
+      ],
+      "explanation": "{{t:Lambda layers}} are versioned .zip archives of libraries, custom runtimes or other files that are extracted to {{code:/opt}} and shared across functions and even across accounts. A function can attach up to 5 layers, the unzipped size of code plus layers must stay under 250 MB, layer versions are immutable, and layers are not available to container-image functions (bake dependencies into the image instead). Use the runtime-specific folder (for example {{code:nodejs/node_modules}}, {{code:python}} or {{code:java/lib}}) so imports work without path changes.",
+      "references": [
+        {
+          "title": "Managing Lambda dependencies with layers",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/chapter-layers.html"
+        },
+        {
+          "title": "Packaging your layer content",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/packaging-layers.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:c9d0864eee752b475e72529fa0c0b6c111872c4deb5e6fafe0dbd03322317ba8"
+    },
+    {
+      "id": "dva-c03/lambda/0007",
+      "revision": 1,
+      "changeKind": "cosmetic",
+      "type": "multi",
+      "selectCount": 2,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.2",
+      "services": [
+        "lambda",
+        "iam",
+        "s3",
+        "dynamodb"
+      ],
+      "tags": [
+        "execution-role",
+        "resource-based-policy",
+        "least-privilege",
+        "permissions"
+      ],
+      "stem": "A developer uses the {{t:AWS CLI}} to create an {{t:AWS Lambda}} function that should run whenever an object is uploaded to an {{t:Amazon S3}} bucket, read the object, and write a summary item to an {{t:Amazon DynamoDB}} table. After the event notification is configured on the bucket, uploads never trigger the function. When the developer runs {{code:aws lambda invoke}} with a sample event, the function starts but fails with an {{code:AccessDeniedException}} for {{code:dynamodb:PutItem}}. Which combination of changes will fix both problems while following the principle of LEAST privilege? (Choose TWO.)",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Add {{code:lambda:InvokeFunction}} for the function's ARN to the function's execution role.",
+          "correct": false,
+          "explanation": "The execution role defines what the function may do while it runs; it is never evaluated to decide who may invoke the function. {{t:S3}} would still be denied, and the role would gain a permission the function itself never uses."
+        },
+        {
+          "id": "b",
+          "text": "Add a resource-based policy statement to the function that allows the {{code:s3.amazonaws.com}} service principal to call {{code:lambda:InvokeFunction}}, with a condition on {{code:aws:SourceArn}} equal to the bucket's ARN.",
+          "correct": true,
+          "explanation": "The function policy is what grants other services and accounts the right to invoke the function. The console adds it automatically when you create a trigger, but with the CLI or infrastructure as code you must run {{code:aws lambda add-permission}} yourself. Scoping it with {{code:aws:SourceArn}} (and {{code:aws:SourceAccount}}) keeps it to one bucket and prevents the confused-deputy problem."
+        },
+        {
+          "id": "c",
+          "text": "Add a statement granting {{code:dynamodb:PutItem}} on the table to the function's resource-based policy.",
+          "correct": false,
+          "explanation": "A {{t:Lambda}} resource-based policy can only grant {{t:Lambda}} actions on that function. {{t:DynamoDB}} authorizes the request against the identity making the call, which is the execution role, so this statement would have no effect."
+        },
+        {
+          "id": "d",
+          "text": "Add a statement granting {{code:dynamodb:PutItem}} on the table's ARN to the function's execution role.",
+          "correct": true,
+          "explanation": "The {{code:AccessDeniedException}} comes from {{t:DynamoDB}} rejecting the credentials {{t:Lambda}} assumed from the execution role. Granting exactly the action and the resource that are needed fixes the write while respecting least privilege."
+        },
+        {
+          "id": "e",
+          "text": "Attach the {{code:AdministratorAccess}} managed policy to the function's execution role.",
+          "correct": false,
+          "explanation": "This would make the {{code:PutItem}} call succeed but grants far more than needed, which violates least privilege. It also does nothing for the missing trigger, because the execution role is irrelevant to invocation permission."
+        }
+      ],
+      "explanation": "Every {{t:Lambda}} function has two separate permission documents. The execution role is identity-based and answers what the function can do (write logs, read {{t:S3}}, write {{t:DynamoDB}}); the resource-based function policy answers who can invoke it (services such as {{t:S3}} or {{t:EventBridge}}, other accounts). Map the symptom: a trigger that never fires means a missing function policy ({{code:add-permission}}); a function that runs but gets {{code:AccessDeniedException}} means a gap in the execution role. Least privilege means naming the specific action and resource in both documents.",
+      "references": [
+        {
+          "title": "Defining Lambda function permissions with an execution role",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html"
+        },
+        {
+          "title": "Viewing resource-based IAM policies in Lambda",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/access-control-resource-based.html"
+        },
+        {
+          "title": "Using Lambda with Amazon S3",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/with-s3.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:3d947766950f9cf74ec872aaa9cd25b27f50a396e15fd1b0b510251a556bcbf2"
+    },
+    {
+      "id": "dva-c03/lambda/0008",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.2",
+      "services": [
+        "lambda",
+        "dynamodb"
+      ],
+      "tags": [
+        "vpc",
+        "gateway-endpoint",
+        "nat-gateway",
+        "lowest-cost"
+      ],
+      "stem": "A developer attaches an {{t:AWS Lambda}} function to two private subnets of an {{t:Amazon VPC}} so that it can reach an {{t:Amazon RDS}} for PostgreSQL database. Immediately after the change, the function's calls to {{t:Amazon DynamoDB}} through the {{t:AWS SDK}} begin to time out, although the execution role's permissions have not changed. The VPC has no {{t:NAT gateway}}, and the function's security group allows all outbound traffic. Which solution restores the function's access to {{t:DynamoDB}} at the LOWEST cost?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Create a {{t:NAT gateway}} in a public subnet and add a default route to it from the private subnets' route tables.",
+          "correct": false,
+          "explanation": "This works, because the function regains outbound access to the public {{t:DynamoDB}} endpoint, but a {{t:NAT gateway}} is billed per hour and per GB processed. It is not the lowest-cost option when a free alternative exists for this particular service."
+        },
+        {
+          "id": "b",
+          "text": "Move the function to the VPC's public subnets, which already have a route to an {{t:internet gateway}}.",
+          "correct": false,
+          "explanation": "The elastic network interfaces that {{t:Lambda}} creates in your VPC have private IP addresses only and cannot be given a public or {{t:Elastic IP address}}, so a function placed in a public subnet still has no path to the internet. This is a classic trap."
+        },
+        {
+          "id": "c",
+          "text": "Create a {{t:gateway VPC endpoint}} for {{t:DynamoDB}} and associate it with the route tables of the private subnets.",
+          "correct": true,
+          "explanation": "Gateway endpoints exist for {{t:Amazon S3}} and {{t:DynamoDB}}. They add a prefix-list route to the subnet route tables so traffic stays on the AWS network, and they carry no hourly or data-processing charge, unlike NAT gateways or interface endpoints."
+        },
+        {
+          "id": "d",
+          "text": "Add an outbound rule to the function's security group that allows HTTPS to the {{t:DynamoDB}} managed prefix list.",
+          "correct": false,
+          "explanation": "The security group already allows all outbound traffic, and a security group only filters traffic; it does not create a network path. Without a NAT gateway or an endpoint there is still no route from the private subnets to {{t:DynamoDB}}."
+        }
+      ],
+      "explanation": "Attaching a function to a VPC gives it network interfaces in your subnets and takes away its default internet access, so calls to AWS public endpoints fail unless you add a {{t:NAT gateway}} (paid) or a VPC endpoint. Gateway endpoints for {{t:S3}} and {{t:DynamoDB}} are free; interface endpoints for other services are billed per hour and per GB. Related facts the exam expects: the execution role needs the {{code:AWSLambdaVPCAccessExecutionRole}} permissions to create network interfaces, you should choose subnets in at least two Availability Zones, and a function that opens many connections to {{t:Amazon RDS}} should connect through {{t:Amazon RDS Proxy}} to pool them.",
+      "references": [
+        {
+          "title": "Giving Lambda functions access to resources in an Amazon VPC",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html"
+        },
+        {
+          "title": "Gateway endpoints for Amazon DynamoDB",
+          "url": "https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-ddb.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:15171d8529cd4130449fa9ae4ffb51bf0268fbac797ffa17169d7c370d8ef0c7"
+    },
+    {
+      "id": "dva-c03/lambda/0009",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.2",
+      "services": [
+        "lambda",
+        "api-gateway",
+        "codedeploy"
+      ],
+      "tags": [
+        "versions",
+        "aliases",
+        "canary",
+        "weighted-routing",
+        "least-ops-overhead"
+      ],
+      "stem": "A developer has finished a change to an {{t:AWS Lambda}} function that backs a production {{t:Amazon API Gateway}} REST API. The team wants to expose the new code to 10 percent of production requests first, increase the share once {{t:Amazon CloudWatch}} error metrics stay healthy, and be able to send all traffic back to the previous code within seconds, all without modifying the {{t:API Gateway}} integration each time. Which approach meets these requirements with the LEAST operational overhead?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Deploy the change to {{code:$LATEST}} and configure the {{t:API Gateway}} integration to invoke the unqualified function ARN so that the new code is live immediately.",
+          "correct": false,
+          "explanation": "{{code:$LATEST}} is mutable: every deployment replaces it immediately for 100 percent of traffic. There is no gradual exposure, and rolling back means redeploying the old code rather than flipping a pointer."
+        },
+        {
+          "id": "b",
+          "text": "Point the {{t:API Gateway}} integration at a {{code:prod}} alias, publish the change as a new version, and set the alias routing configuration to send 10 percent of invocations to the new version.",
+          "correct": true,
+          "explanation": "An alias can split traffic between two published versions with a weighted {{code:RoutingConfig}}. Shifting traffic or rolling back is a single {{code:UpdateAlias}} call that takes effect in seconds, and the integration keeps invoking the same alias ARN throughout."
+        },
+        {
+          "id": "c",
+          "text": "Create a second {{t:API Gateway}} stage for the new version and use an {{t:Amazon Route 53}} weighted record set to split traffic between the two stage URLs.",
+          "correct": false,
+          "explanation": "This can split traffic, but it means maintaining two stages and two deployments, and a rollback waits on DNS TTLs and client caches instead of taking effect in seconds. It is considerably more to operate than an alias weight."
+        },
+        {
+          "id": "d",
+          "text": "Publish a new version and update the {{t:API Gateway}} integration to the new version's qualified ARN; redeploy the API stage to roll back.",
+          "correct": false,
+          "explanation": "This is an all-or-nothing cutover, and it requires editing the integration and redeploying the stage both for the release and for the rollback, which is exactly what the requirements exclude."
+        }
+      ],
+      "explanation": "Versions are immutable, numbered snapshots of code plus configuration; {{code:$LATEST}} is the mutable working copy; aliases are named pointers that event sources and integrations should reference so the target can change without touching them. Alias weighted routing (two published versions, never {{code:$LATEST}}) is the built-in canary mechanism, and {{t:AWS CodeDeploy}} through an {{t:AWS SAM}} {{code:DeploymentPreference}} such as {{code:Canary10Percent5Minutes}} automates the same weight shift with alarm-based rollback. The closest distractor is pointing integrations directly at a version ARN, which forces an integration change on every release.",
+      "references": [
+        {
+          "title": "Create an alias for a Lambda function",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/configuration-aliases.html"
+        },
+        {
+          "title": "Managing Lambda function versions",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/configuration-versions.html"
+        },
+        {
+          "title": "Implementing safe Lambda deployments with rolling deployments",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/lambda-rolling-deployments.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:12b33067629cd480c77395e4052b95ae76be58d7cf83135d9a1119b29f9279dc"
+    },
+    {
+      "id": "dva-c03/lambda/0010",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 3,
+      "domainId": "d1",
+      "taskId": "1.2",
+      "services": [
+        "lambda",
+        "secrets-manager",
+        "dynamodb"
+      ],
+      "tags": [
+        "best-practices",
+        "execution-environment",
+        "initialization",
+        "sdk-clients",
+        "most-cost-effective"
+      ],
+      "stem": "A Python {{t:AWS Lambda}} function serves about 2 million {{t:Amazon API Gateway}} requests per day. Inside the handler, the code creates new {{t:AWS SDK for Python (Boto3)}} clients for {{t:Amazon DynamoDB}} and {{t:AWS Secrets Manager}} and then calls {{code:GetSecretValue}} to load a database password before doing its work. {{t:AWS X-Ray}} traces show that these steps add roughly 150 ms to every invocation, warm invocations included, and the {{t:Secrets Manager}} API call volume has become a noticeable line on the bill. Which change will reduce the per-invocation latency and cost in the MOST cost-effective way?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Move the client creation and the {{code:GetSecretValue}} call out of the handler into module-level initialization code so that they run once per execution environment.",
+          "correct": true,
+          "explanation": "Code outside the handler runs during the Init phase, once per execution environment, and objects kept in module scope survive across the many invocations that reuse that environment. The clients and the cached secret are therefore built once instead of millions of times, removing both the latency and most of the {{t:Secrets Manager}} calls at zero extra cost."
+        },
+        {
+          "id": "b",
+          "text": "Enable {{t:provisioned concurrency}} on the function so that execution environments are pre-initialized before requests arrive.",
+          "correct": false,
+          "explanation": "Provisioned concurrency runs the Init phase ahead of time, but the expensive work in this function is inside the handler, so it still executes on every single invocation. This adds a continuous charge without fixing the problem."
+        },
+        {
+          "id": "c",
+          "text": "Increase the function's memory from 512 MB to 3,008 MB so that the extra CPU speeds up client creation and the API calls.",
+          "correct": false,
+          "explanation": "Extra CPU can shave a few milliseconds off client construction, but the 150 ms is dominated by network round trips to {{t:Secrets Manager}}, which still happen on every invocation, and the price per millisecond rises about six-fold."
+        },
+        {
+          "id": "d",
+          "text": "Enable {{t:Lambda SnapStart}} on a published version of the function so that initialization is restored from a snapshot.",
+          "correct": false,
+          "explanation": "{{t:SnapStart}} only shortens cold starts by restoring a snapshot taken after initialization. Code inside the handler is never part of the snapshot and runs in full on every invocation, so neither the latency nor the API call volume would change."
+        }
+      ],
+      "explanation": "The core {{t:Lambda}} best practice is to separate the Init phase from the Invoke phase: create SDK clients, database connections and cached configuration outside the handler so warm invocations reuse them, keep the handler itself lean, and never keep user-specific data in those globals. Provisioned concurrency and {{t:SnapStart}} only optimise the Init phase, so they cannot help with work that is inside the handler. For configuration at scale, the {{t:AWS Parameters and Secrets Lambda Extension}} (a layer that caches values behind a local HTTP endpoint) or the parameters utility of {{t:Powertools for AWS Lambda}} adds TTL-based caching and refresh for rotated secrets. If you keep secrets in environment variables instead, remember they are encrypted at rest with {{t:AWS KMS}}, but every environment still needs a redeploy to pick up a rotation.",
+      "references": [
+        {
+          "title": "Best practices for working with AWS Lambda functions",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/best-practices.html"
+        },
+        {
+          "title": "Understanding the Lambda execution environment lifecycle",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtime-environment.html"
+        },
+        {
+          "title": "Use AWS Secrets Manager secrets in AWS Lambda functions",
+          "url": "https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieving-secrets_lambda.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:7aa05d4dc5b4ccea1f27d08e264c3d6681a6a3d218f939a68d91886befc26d7a"
+    },
+    {
+      "id": "dva-c03/lambda/0011",
+      "revision": 1,
+      "changeKind": "material",
+      "type": "single",
+      "selectCount": 1,
+      "difficulty": 2,
+      "domainId": "d1",
+      "taskId": "1.2",
+      "services": [
+        "lambda",
+        "ecs",
+        "fargate",
+        "step-functions",
+        "eventbridge"
+      ],
+      "tags": [
+        "timeout",
+        "15-minutes",
+        "long-running",
+        "fewest-changes"
+      ],
+      "stem": "A developer wrote a Python {{t:AWS Lambda}} function that produces a month-end reconciliation report. It streams about 20 million rows from a data warehouse through a single database cursor, aggregates them in memory, and uploads one PDF to {{t:Amazon S3}}. The algorithm requires one pass over the sorted result set and cannot easily be checkpointed or split into independent chunks. With production data volumes the function is terminated after 15 minutes with the message {{code:Task timed out}}, even though its timeout is already set to the maximum value. Which solution will let the report complete with the FEWEST changes to the application logic?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Increase the function's timeout to 60 minutes by requesting a quota increase through {{t:Service Quotas}} and raise its memory to 10,240 MB.",
+          "correct": false,
+          "explanation": "The maximum {{t:Lambda}} timeout is 900 seconds (15 minutes) and it is a hard quota that cannot be raised through {{t:Service Quotas}}. More memory adds CPU, but a single-cursor streaming job is bound by the database round trips and would still be cut off at 15 minutes."
+        },
+        {
+          "id": "b",
+          "text": "Configure {{t:provisioned concurrency}} on the function so that the job is never interrupted by cold starts or environment recycling.",
+          "correct": false,
+          "explanation": "Provisioned concurrency removes initialization latency at the start of an invocation. It has no effect on how long a single invocation may run, so the job would still be terminated at the 15-minute limit."
+        },
+        {
+          "id": "c",
+          "text": "Wrap the existing function in an {{t:AWS Step Functions}} Standard workflow and set {{code:TimeoutSeconds}} of 7,200 on the Task state.",
+          "correct": false,
+          "explanation": "{{t:Step Functions}} can run a workflow for up to a year, but every Task state that invokes {{t:Lambda}} is still bound by the 15-minute invocation limit. It would help only if the work were rewritten into many shorter invocations, for example with a Map state, which this single-pass algorithm does not allow."
+        },
+        {
+          "id": "d",
+          "text": "Package the same Python code as a container image and run it as an {{t:Amazon ECS}} task on {{t:AWS Fargate}} started by an {{t:Amazon EventBridge}} schedule.",
+          "correct": true,
+          "explanation": "A {{t:Fargate}} task has no 15-minute ceiling and can run for hours, the Python code is unchanged apart from a container entrypoint, and the scheduled {{t:EventBridge}} rule with a {{code:RunTask}} target replaces the {{t:Lambda}} trigger. {{t:AWS Batch}} would be an equally valid home for the job."
+        }
+      ],
+      "explanation": "The 15-minute (900-second) timeout is the most-tested {{t:Lambda}} quota and it cannot be raised. When one unit of work must run longer, either move it to a long-running compute service such as {{t:Amazon ECS}} on {{t:AWS Fargate}} or {{t:AWS Batch}}, or redesign it into chunked invocations orchestrated by {{t:AWS Step Functions}}. The distinguishing fact is that {{t:Step Functions}} adds orchestration time, not longer individual invocations: a Task that calls {{t:Lambda}} is still a {{t:Lambda}} invocation. The related number for synchronous APIs is the {{t:Amazon API Gateway}} default integration timeout of 29 seconds, which bites long before 15 minutes.",
+      "references": [
+        {
+          "title": "Configure Lambda function timeout",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/configuration-timeout.html"
+        },
+        {
+          "title": "Lambda quotas",
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html"
+        },
+        {
+          "title": "Scheduling Amazon ECS tasks with EventBridge",
+          "url": "https://docs.aws.amazon.com/AmazonECS/latest/developerguide/scheduled_tasks.html"
+        }
+      ],
+      "meta": {
+        "author": "claude",
+        "reviewed": false,
+        "createdAt": "2026-10-20"
+      },
+      "contentHash": "sha256:7861cdba2f7e9ffa4252cbece234bc2c1aa6f07ba031a0dbb0cba50c20663aae"
+    }
+  ]
+}
