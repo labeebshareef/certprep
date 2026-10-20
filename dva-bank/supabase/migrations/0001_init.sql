@@ -1,8 +1,7 @@
 -- First-cut schema for per-user study state. Content (questions) lives in JSON in the repo, NOT here.
--- Every user-scoped table: user_id defaults to auth.uid(), RLS on, single policy, btree index on user_id.
--- Review before applying; adjust names to taste. Tested only for syntax shape, not against a live project.
-
-create extension if not exists pgcrypto;
+-- Every user-scoped table: user_id defaults to auth.uid(), RLS on, own-rows policy, index led by user_id.
+-- attempts is append-only: select + insert policies only (sync upserts use ON CONFLICT DO NOTHING).
+-- Review before applying. Not yet run against a live project.
 
 -- ---------- profiles ----------
 create table if not exists public.profiles (
@@ -11,7 +10,7 @@ create table if not exists public.profiles (
   day_rollover_hour  smallint    not null default 4 check (day_rollover_hour between 0 and 23),
   locale             text        not null default 'en',
   new_per_day        smallint    not null default 10 check (new_per_day between 0 and 50),
-  daily_goal_min     smallint    not null default 20,
+  daily_goal_min     smallint    not null default 20 check (daily_goal_min between 5 and 120),
   desired_retention  real        not null default 0.9 check (desired_retention between 0.7 and 0.99),
   active_course      text        not null default 'dva-c03',
   streak_freezes     smallint    not null default 0 check (streak_freezes between 0 and 2),
@@ -21,7 +20,7 @@ create table if not exists public.profiles (
 
 -- auto-create a profile on signup
 create or replace function public.handle_new_user()
-returns trigger language plpgsql security definer set search_path = public as $$
+returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   insert into public.profiles (user_id) values (new.id) on conflict do nothing;
   return new;
@@ -101,8 +100,9 @@ create table if not exists public.daily_activity (
   local_date   date     not null,
   answered     integer  not null default 0,
   correct      integer  not null default 0,
+  sessions_completed integer not null default 0,   -- sessions with ended_at set on this local day
   minutes      real     not null default 0,
-  goal_met     boolean  not null default false,
+  goal_met     boolean  not null default false,   -- 20-minute ring; separate from the streak
   freeze_used  boolean  not null default false,
   primary key (user_id, local_date)
 );
@@ -126,15 +126,23 @@ begin
   foreach t in array array['profiles','review_states','attempts','sessions','daily_activity','section_progress'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "own rows" on public.%I', t);
+  end loop;
+  foreach t in array array['profiles','review_states','sessions','daily_activity','section_progress'] loop
     execute format(
       'create policy "own rows" on public.%I for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id)', t);
   end loop;
 end $$;
 
+-- attempts: append-only
+drop policy if exists "own rows read" on public.attempts;
+drop policy if exists "own rows insert" on public.attempts;
+create policy "own rows read" on public.attempts for select to authenticated using ((select auth.uid()) = user_id);
+create policy "own rows insert" on public.attempts for insert to authenticated with check ((select auth.uid()) = user_id);
+
 -- ---------- helpers ----------
 -- local study date with a 04:00 rollover in the user's time zone
 create or replace function public.local_study_date(ts timestamptz, tz text, rollover_hour int default 4)
-returns date language sql immutable as $$
+returns date language sql stable as $$  -- stable, not immutable: tz rules can change
   select ((ts at time zone tz) - make_interval(hours => rollover_hour))::date
 $$;
 
@@ -149,7 +157,9 @@ where not r.suspended
     + make_interval(hours => p.day_rollover_hour)
   ) at time zone p.timezone;
 
--- streak: consecutive local dates (goal_met or freeze_used) ending today or yesterday
+-- streak: consecutive local dates that qualify (>=1 completed session, >=5 answers, or a freeze) ending today or yesterday.
+-- The daily goal (goal_met) is a separate ring and does not affect the streak. Freezes are earned/spent by the client
+-- (1 per 7-day streak, max 2 in profiles.streak_freezes) by setting freeze_used on the missed day.
 create or replace function public.streak_status()
 returns table (current_streak int, longest_streak int, today_done boolean)
 language plpgsql stable security invoker as $$
@@ -162,7 +172,7 @@ begin
 
   for d in
     select local_date from public.daily_activity
-    where user_id = (select auth.uid()) and (goal_met or freeze_used or answered >= 5)
+    where user_id = (select auth.uid()) and (sessions_completed >= 1 or answered >= 5 or freeze_used)
     order by local_date
   loop
     if prev is not null and d = prev + 1 then run := run + 1; else run := 1; end if;
@@ -171,7 +181,7 @@ begin
   end loop;
 
   if prev is not null and (prev = today or prev = today - 1) then cur := run; else cur := 0; end if;
-  select coalesce(bool_or(goal_met or answered >= 5), false) into done
+  select coalesce(bool_or(sessions_completed >= 1 or answered >= 5), false) into done
   from public.daily_activity where user_id = (select auth.uid()) and local_date = today;
 
   return query select cur, longest, done;

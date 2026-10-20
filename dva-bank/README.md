@@ -7,7 +7,7 @@ Start here: `CLAUDE.md` (decisions, build order, conventions) → `docs/SPEC.md`
 ```
 CLAUDE.md             project guide for Claude Code sessions
 docs/SPEC.md          technical spec: exam facts, FSRS, schema, Supabase, stack, MVP plan
-supabase/migrations/  0001_init.sql — first-cut per-user state schema with RLS
+supabase/migrations/  0001_init.sql — per-user state schema with RLS (tested locally, not yet applied)
 .claude/skills/       magic-ui skill (free components only)
 content/dva-c03/
   course.json         domains + weights, task statements, section order and unlock gating

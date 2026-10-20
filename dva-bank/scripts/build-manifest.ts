@@ -29,6 +29,11 @@ if (existsSync(mlDir))
   for (const f of readdirSync(mlDir).filter((f) => f.endsWith(".json")))
     files[`i18n/ml/${f}`] = { hash: sha(readFileSync(join(mlDir, f))) };
 
-const manifest = { courseId: course.id, generatedAt: new Date().toISOString(), totalQuestions: total, perDomain, files };
-writeFileSync(join(courseDir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+// Keep the previous generatedAt when nothing else changed, so a no-op build leaves the tree clean.
+const mPath = join(courseDir, "manifest.json");
+const body = { totalQuestions: total, perDomain, files };
+const prev = existsSync(mPath) ? JSON.parse(readFileSync(mPath, "utf8")) : null;
+const unchanged = prev && JSON.stringify({ totalQuestions: prev.totalQuestions, perDomain: prev.perDomain, files: prev.files }) === JSON.stringify(body);
+const manifest = { courseId: course.id, generatedAt: unchanged ? prev.generatedAt : new Date().toISOString(), ...body };
+writeFileSync(mPath, JSON.stringify(manifest, null, 2) + "\n");
 console.log(`manifest: ${total} questions`, perDomain);

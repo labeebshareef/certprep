@@ -1,6 +1,6 @@
 # DVA Exam-Prep PWA: Technical Spec and MVP Plan (October 2026)
 
-Research compiled 2026-10-20. Package versions were read from registry listings and should be confirmed with `npm view <pkg> version` before pinning. Bank sizes, the readiness formula and the leech threshold are engineering judgement, not AWS or FSRS guidance.
+Research compiled 2026-10-20. Package versions in §(c) were confirmed with `npm view` on 2026-10-20. Bank sizes, the readiness formula and the leech threshold are engineering judgement, not AWS or FSRS guidance.
 
 **Decide which exam version you're taking before you write any questions.** AWS announced that the last day to take DVA-C02 is **November 30, 2026**. DVA-C03 becomes generally available on **December 1, 2026**, and registration opens October 27, 2026 (the full C03 guide is published the same day). The app design below works for either version. The question bank does not, so the course folder is versioned (`dva-c02/`, `dva-c03/`).
 
@@ -172,6 +172,7 @@ Zod rules enforced: single = exactly 4 choices and 1 correct; multi = ≥5 choic
 - Write-heavy data is append-only (`attempts`). `review_states` is a derived cache rebuildable from attempts via `reschedule()`.
 - Every user-scoped table: `user_id uuid not null default auth.uid()`, RLS on, policy `using ((select auth.uid()) = user_id)` (the `select` wrapper lets Postgres cache the call per statement). Btree index on `user_id`. Already SaaS-ready.
 - Views `with (security_invoker = true)` so they respect RLS.
+- `attempts` is append-only at the policy level: RLS grants select + insert only. Sync inserts with ON CONFLICT DO NOTHING.
 - **No pg_cron for the MVP.** Compute streaks on read from `daily_activity`. Add cron/Edge Functions later for reminders and weekly summaries.
 
 ### SQL sketch
@@ -183,7 +184,8 @@ where not r.suspended
   and r.due < ((now() at time zone p.timezone - interval '4 hours')::date + 1 + interval '4 hours')
               at time zone p.timezone;
 
--- streak: consecutive local_dates with goal_met (or freeze_used) ending today/yesterday
+-- streak: consecutive local_dates with sessions_completed >= 1, answered >= 5, or freeze_used, ending today/yesterday
+-- (goal_met is the separate daily-goal ring and does not count toward the streak)
 create function streak_status() returns table(current int, longest int, today_done bool)
 language sql stable security invoker as $$ ... gaps-and-islands over daily_activity ... $$;
 ```
@@ -229,27 +231,27 @@ language sql stable security invoker as $$ ... gaps-and-islands over daily_activ
 | `review_states` | pk (`user_id`, `question_id`), `course_id`, `content_hash`, FSRS fields (`state, due, stability, difficulty, elapsed_days, scheduled_days, learning_steps, reps, lapses, last_review`), `is_leech`, `suspended`, `updated_at` | Index `(user_id, due)`; derived, rebuildable |
 | `attempts` | `id uuid pk` (client-generated), `course_id`, `question_id`, `content_hash`, `session_id`, `mode`, `selected text[]`, `correct`, `confidence`, `rating`, `time_ms`, `answered_at`, `local_date`, `domain_id`, `task_id`, `section_id` | Append-only; denormalised tags for analytics |
 | `sessions` | `id`, `local_date`, `kind`, `started_at`, `ended_at`, `planned_due`, `planned_new`, `answered`, `correct` | |
-| `daily_activity` | pk (`user_id`, `local_date`), `answered`, `correct`, `minutes`, `goal_met`, `freeze_used` | Upserted by the client after each session |
+| `daily_activity` | pk (`user_id`, `local_date`), `answered`, `correct`, `sessions_completed`, `minutes`, `goal_met`, `freeze_used` | Upserted by the client after each session |
 | `section_progress` | pk (`user_id`, `course_id`, `section_id`), `best_pct`, `attempts`, `passed_at` | Drives unlock gating |
 | Views/RPCs | `due_today`, `streak_status()`, `topic_stats(course_id)` | Readiness weights applied client-side |
 
-## (c) Library and stack list (versions as of ~2026-10-20; confirm before pinning)
+## (c) Library and stack list (confirmed with `npm view` on 2026-10-20)
 
 | Package | Version | Notes |
 |---|---|---|
-| vite | 8.x | `npm create vite@latest` |
-| react / react-dom | 19.3.x | |
-| typescript | 5.x | |
-| react-router | 8.x (`react-router-dom` removed in v8 — check the changelog) or @tanstack/react-router 1.170.x | |
+| vite | 8.3.x | `npm create vite@latest` |
+| react / react-dom | 19.3.1 | |
+| typescript | **5.9.3** exactly | npm `latest` is 7.0.2 (native Go compiler) and 6.0.3 also exists; stay on 5.9 for tooling compatibility |
+| react-router | 8.5.x | Import from `react-router` only; there is no `react-router-dom` v8 (last is 7.18.x) |
 | @tanstack/react-query | 5.104.x | |
-| @supabase/supabase-js | 2.118.x | 3.0 pre-release exists; stay on 2.x |
+| @supabase/supabase-js | 2.118.0 | 3.0 pre-release exists; stay on 2.x |
 | ts-fsrs | **5.4.2** exactly | FSRS-6; v6 stable targeted 2026-10-28 |
-| zod | 4.6.x | `z.toJSONSchema()` for generator prompts |
-| vite-plugin-pwa | 2.0.x | Node ≥ 20.19 |
+| zod | 4.6.7 | `z.toJSONSchema()` for generator prompts |
+| vite-plugin-pwa | 2.0.0 | Node ≥ 20.19 |
 | i18next / react-i18next | 26.5.x / 17.1.x | i18next-icu later if needed |
 | idb-keyval (or dexie) | 6.3.x (4.4.x) | idb-keyval is enough for an outbox |
-| tailwindcss | 4.3.x | |
-| recharts | 3.10.x | |
+| tailwindcss | 4.3.3 | |
+| recharts | 3.10.1 | |
 | @fontsource-variable/noto-sans-malayalam, @fontsource-variable/inter | latest | Self-hosted, offline |
 | Node | 22 or 24 LTS | |
 
@@ -257,7 +259,7 @@ language sql stable security invoker as $$ ... gaps-and-islands over daily_activ
 
 **Day 1 (~8–10 h): everything needed to answer a question and have it remembered.**
 1. (1h) Scaffold: Vite + React + TS + Tailwind, Supabase project, magic-link auth, `profiles` row on first login.
-2. (1.5h) Migration: `review_states`, `attempts`, `daily_activity`, `section_progress` + RLS + indexes. `supabase gen types`.
+2. (1.5h) Migration: `profiles`, `review_states`, `attempts`, `sessions`, `daily_activity`, `section_progress` + RLS + indexes (already written in `0001_init.sql`; apply it). `supabase gen types`.
 3. (1.5h) Content: load `course.json` + topic files through the Zod schema; the seed bank is already here.
 4. (2.5h) Study loop: session builder (due → new, caps) → question card (stem, shuffled choices, single/multi select, sure/unsure toggle *before* submit) → reveal (correct choices, per-choice explanations, references) → rate via ts-fsrs → persist attempt + state (online-only for now).
 5. (1h) Section quiz mode + 80% gate + `section_progress`.
@@ -273,7 +275,6 @@ language sql stable security invoker as $$ ... gaps-and-islands over daily_activ
 - DVA-C03 task statements are unpublished until 2026-10-27; C03 details above come from AWS's announcement.
 - Bank sizes, readiness formula and leech threshold are engineering judgement; calibrate against a real mock score.
 - FSRS benchmark figures are from the FSRS team; Duolingo figures are company-reported A/B results on language learners.
-- Package versions came partly from registry listings with relative dates; verify before pinning.
 - LLM-generated questions contain wrong answer keys. `references[]` is mandatory, `reviewed:false` stays visible, and leeches / confident-wrong clusters are audited as content first.
 
 ## Sources (selected)
