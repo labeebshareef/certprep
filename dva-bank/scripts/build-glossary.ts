@@ -16,9 +16,10 @@ for (const f of readdirSync(join(courseDir, "topics")).filter((f) => f.endsWith(
       for (const m of s.matchAll(/\{\{t:([^}]+)\}\}/g)) usage.set(m[1], (usage.get(m[1]) ?? 0) + 1);
 }
 let added = 0;
+for (const t of byTerm.values()) t.uses = 0; // recount from scratch so repeated builds are idempotent
 for (const [term, count] of usage) {
   const existing = byTerm.get(term) ?? [...byTerm.values()].find((t) => t.short === term);
-  if (existing) { existing.uses = (existing.uses ?? 0) + count; continue; }
+  if (existing) { existing.uses += count; continue; }
   byTerm.set(term, { term, gloss: "", uses: count });
   added++;
 }

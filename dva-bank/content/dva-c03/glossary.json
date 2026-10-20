@@ -6,673 +6,675 @@
       "term": "Amazon API Gateway",
       "short": "API Gateway",
       "gloss": "",
-      "uses": 80
+      "uses": 40
     },
     {
       "term": "Amazon Athena",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "Amazon CloudFront",
       "short": "CloudFront",
       "gloss": "",
-      "uses": 6
+      "uses": 3
     },
     {
       "term": "Amazon CloudWatch",
       "short": "CloudWatch",
       "gloss": "",
-      "uses": 42
+      "uses": 21
     },
     {
       "term": "Amazon CloudWatch Logs",
       "gloss": "",
-      "uses": 14
+      "uses": 7
     },
     {
       "term": "Amazon Cognito",
       "short": "Cognito",
       "gloss": "",
-      "uses": 6
+      "uses": 3
     },
     {
       "term": "Amazon Cognito identity pool",
       "gloss": "",
-      "uses": 6
+      "uses": 3
     },
     {
       "term": "Amazon Cognito user pool",
       "gloss": "",
-      "uses": 8
+      "uses": 4
     },
     {
       "term": "Amazon Data Firehose",
       "short": "Firehose",
       "gloss": "",
-      "uses": 8
+      "uses": 4
     },
     {
       "term": "Amazon DynamoDB",
       "short": "DynamoDB",
       "gloss": "",
-      "uses": 112
+      "uses": 56
     },
     {
       "term": "Amazon EBS",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Amazon EC2",
       "gloss": "",
-      "uses": 8
+      "uses": 4
     },
     {
       "term": "Amazon ECR",
       "short": "ECR",
       "gloss": "",
-      "uses": 14
+      "uses": 7
     },
     {
       "term": "Amazon ECS",
       "short": "ECS",
       "gloss": "",
-      "uses": 28
+      "uses": 14
     },
     {
       "term": "Amazon EFS",
       "gloss": "",
-      "uses": 6
+      "uses": 3
     },
     {
       "term": "Amazon ElastiCache",
       "short": "ElastiCache",
       "gloss": "",
-      "uses": 12
+      "uses": 6
     },
     {
       "term": "Amazon EventBridge",
       "short": "EventBridge",
       "gloss": "",
-      "uses": 38
+      "uses": 19
     },
     {
       "term": "Amazon Kinesis",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Amazon Kinesis Data Streams",
       "short": "Kinesis Data Streams",
       "gloss": "",
-      "uses": 14
+      "uses": 7
     },
     {
       "term": "Amazon MSK",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Amazon RDS",
       "gloss": "",
-      "uses": 10
+      "uses": 5
     },
     {
       "term": "Amazon RDS for MySQL",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Amazon RDS Proxy",
       "gloss": "",
-      "uses": 6
+      "uses": 3
     },
     {
       "term": "Amazon Route 53",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Amazon S3",
       "short": "S3",
       "gloss": "",
-      "uses": 101
+      "uses": 51
     },
     {
       "term": "Amazon SNS",
       "short": "SNS",
       "gloss": "",
-      "uses": 18
+      "uses": 9
     },
     {
       "term": "Amazon SQS",
       "short": "SQS",
       "gloss": "",
-      "uses": 40
+      "uses": 20
     },
     {
       "term": "Amazon SQS Extended Client Library",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "Amazon VPC",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Application Load Balancer",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "AWS AppConfig",
       "short": "AppConfig",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "AWS Batch",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "AWS CDK",
       "short": "CDK",
-      "gloss": ""
+      "gloss": "",
+      "uses": 0
     },
     {
       "term": "AWS Certificate Manager",
       "gloss": "",
-      "uses": 8
+      "uses": 4
     },
     {
       "term": "AWS CLI",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "AWS CloudFormation",
       "short": "CloudFormation",
       "gloss": "",
-      "uses": 11
+      "uses": 5
     },
     {
       "term": "AWS CloudTrail",
       "short": "CloudTrail",
       "gloss": "",
-      "uses": 24
+      "uses": 12
     },
     {
       "term": "AWS CodeArtifact",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "AWS CodeBuild",
       "short": "CodeBuild",
       "gloss": "",
-      "uses": 50
+      "uses": 25
     },
     {
       "term": "AWS CodeConnections",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "AWS CodeDeploy",
       "short": "CodeDeploy",
       "gloss": "",
-      "uses": 30
+      "uses": 15
     },
     {
       "term": "AWS CodePipeline",
       "short": "CodePipeline",
       "gloss": "",
-      "uses": 14
+      "uses": 7
     },
     {
       "term": "AWS Config",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "AWS Elastic Beanstalk",
       "short": "Elastic Beanstalk",
       "gloss": "",
-      "uses": 8
+      "uses": 4
     },
     {
       "term": "AWS Encryption SDK",
       "gloss": "",
-      "uses": 6
+      "uses": 3
     },
     {
       "term": "AWS Fargate",
       "short": "Fargate",
       "gloss": "",
-      "uses": 14
+      "uses": 7
     },
     {
       "term": "AWS IAM",
       "short": "IAM",
       "gloss": "",
-      "uses": 70
+      "uses": 35
     },
     {
       "term": "AWS KMS",
       "short": "KMS",
       "gloss": "",
-      "uses": 24
+      "uses": 12
     },
     {
       "term": "AWS Lambda",
       "short": "Lambda",
       "gloss": "",
-      "uses": 240
+      "uses": 120
     },
     {
       "term": "AWS managed key",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "AWS Parameters and Secrets Lambda Extension",
       "gloss": "",
-      "uses": 6
+      "uses": 3
     },
     {
       "term": "AWS Private CA",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "AWS SAM",
       "short": "SAM",
       "gloss": "",
-      "uses": 20
+      "uses": 10
     },
     {
       "term": "AWS SDK",
       "gloss": "",
-      "uses": 18
+      "uses": 9
     },
     {
       "term": "AWS SDK for JavaScript",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "AWS SDK for Python (Boto3)",
       "gloss": "",
-      "uses": 6
+      "uses": 3
     },
     {
       "term": "AWS Secrets Manager",
       "short": "Secrets Manager",
       "gloss": "",
-      "uses": 36
+      "uses": 18
     },
     {
       "term": "AWS Step Functions",
       "short": "Step Functions",
       "gloss": "",
-      "uses": 12
+      "uses": 6
     },
     {
       "term": "AWS STS",
       "short": "STS",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "AWS Systems Manager",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "AWS Systems Manager Parameter Store",
       "short": "Parameter Store",
       "gloss": "",
-      "uses": 26
+      "uses": 13
     },
     {
       "term": "AWS Systems Manager Session Manager",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "AWS X-Ray",
       "short": "X-Ray",
       "gloss": "",
-      "uses": 48
+      "uses": 24
     },
     {
       "term": "CloudTrail Lake",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "CloudWatch agent",
       "gloss": "",
-      "uses": 6
+      "uses": 3
     },
     {
       "term": "CloudWatch embedded metric format",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "CloudWatch Logs",
       "gloss": "",
-      "uses": 14
+      "uses": 7
     },
     {
       "term": "CloudWatch Logs Insights",
       "gloss": "",
-      "uses": 8
+      "uses": 4
     },
     {
       "term": "CodeArtifact",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Cognito user pool authorizer",
       "gloss": "",
-      "uses": 10
+      "uses": 5
     },
     {
       "term": "customer managed key",
       "gloss": "",
-      "uses": 16
+      "uses": 8
     },
     {
       "term": "dead-letter queue",
       "short": "DLQ",
       "gloss": "",
-      "uses": 6
+      "uses": 3
     },
     {
       "term": "DynamoDB Accelerator",
       "short": "DAX",
       "gloss": "",
-      "uses": 16
+      "uses": 8
     },
     {
       "term": "DynamoDB auto scaling",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "DynamoDB Streams",
       "gloss": "",
-      "uses": 18
+      "uses": 9
     },
     {
       "term": "EBS",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "EC2",
       "gloss": "",
-      "uses": 10
+      "uses": 5
     },
     {
       "term": "EFS",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Elastic IP address",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Elastic Load Balancing",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "embedded metric format",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "EMF",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "enhanced fan-out",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "envelope encryption",
-      "gloss": ""
+      "gloss": "",
+      "uses": 0
     },
     {
       "term": "EventBridge schema registry",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Express Workflows",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "gateway VPC endpoint",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "global secondary index",
       "gloss": "",
-      "uses": 8
+      "uses": 4
     },
     {
       "term": "hosted UI",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "identity pool",
       "gloss": "",
-      "uses": 18
+      "uses": 9
     },
     {
       "term": "instance profile",
       "gloss": "",
-      "uses": 18
+      "uses": 9
     },
     {
       "term": "internet gateway",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Kinesis",
       "gloss": "",
-      "uses": 8
+      "uses": 4
     },
     {
       "term": "Kinesis Client Library",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Lambda authorizer",
       "gloss": "",
-      "uses": 10
+      "uses": 5
     },
     {
       "term": "Lambda destinations",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Lambda layer",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "Lambda layers",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "Lambda Power Tuning",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Lambda SnapStart",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "local secondary index",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Logs Insights",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "Memcached",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "NAT gateway",
       "gloss": "",
-      "uses": 8
+      "uses": 4
     },
     {
       "term": "Powertools",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Powertools for AWS Lambda",
       "gloss": "",
-      "uses": 8
+      "uses": 4
     },
     {
       "term": "pre token generation",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "presigned URL",
       "gloss": "",
-      "uses": 18
+      "uses": 9
     },
     {
       "term": "provisioned concurrency",
       "gloss": "",
-      "uses": 10
+      "uses": 5
     },
     {
       "term": "RDS Proxy",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Redis",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "reserved concurrency",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "S3 Block Public Access",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "S3 Bucket Key",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "S3 Bucket Keys",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "Service Quotas",
       "gloss": "",
-      "uses": 7
+      "uses": 4
     },
     {
       "term": "Signature Version 4 (SigV4)",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "SigV4",
       "gloss": "",
-      "uses": 22
+      "uses": 11
     },
     {
       "term": "SnapStart",
       "gloss": "",
-      "uses": 12
+      "uses": 6
     },
     {
       "term": "SSE-C",
       "gloss": "",
-      "uses": 6
+      "uses": 3
     },
     {
       "term": "SSE-KMS",
       "gloss": "",
-      "uses": 10
+      "uses": 5
     },
     {
       "term": "SSE-S3",
       "gloss": "",
-      "uses": 6
+      "uses": 3
     },
     {
       "term": "Standard Workflows",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Systems Manager Run Command",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     },
     {
       "term": "Time to Live",
       "gloss": "",
-      "uses": 6
+      "uses": 3
     },
     {
       "term": "user pool",
       "gloss": "",
-      "uses": 40
+      "uses": 20
     },
     {
       "term": "VPC",
       "gloss": "",
-      "uses": 4
+      "uses": 2
     },
     {
       "term": "X-Ray daemon",
       "gloss": "",
-      "uses": 2
+      "uses": 1
     }
   ]
 }
