@@ -8,7 +8,7 @@ Owner: Labeeb (senior fullstack JS engineer, frontend specialisation). Goal: pas
 - `preview.html` — throwaway quiz runner (localStorage only). Replace with the PWA; don't extend it.
 - `docs/SPEC.md` — the full technical spec and research (exam facts, FSRS, schema, Supabase tables, stack, MVP plan). **Read it before building.**
 - `supabase/migrations/0001_init.sql` — per-user state schema. Reviewed and smoke-tested on local Postgres 16 with auth stubs (idempotent re-run, RLS isolation, append-only `attempts`, streak + freeze). **Not yet applied** to the hosted project.
-- Supabase project: ref `uzmadqbamyryefhayyzy`, region ap-southeast-2 (Sydney), URL `https://uzmadqbamyryefhayyzy.supabase.co`. Keys/DB password go in `.env` (gitignored), never in the repo. Note: the `supabase_local_artist_production` MCP server in Claude sessions is a *different* project — never run migrations through it.
+- Supabase project: ref `uzmadqbamyryefhayyzy`, region ap-southeast-2 (Sydney), URL `https://uzmadqbamyryefhayyzy.supabase.co`. Keys/DB password go in `.env` (gitignored), never in the repo. In Claude sessions the `supabase_certprep` MCP server is connected to this project; any other Supabase MCP server is a different project — never run migrations through it. Use the `sb_publishable_...` key, not the legacy anon JWT.
 - `.claude/skills/magic-ui/SKILL.md` — UI component skill. Use the free Magic UI components only.
 
 ## Decisions (do not re-litigate without asking)
