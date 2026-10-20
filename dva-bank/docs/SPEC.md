@@ -1,5 +1,7 @@
 # DVA Exam-Prep PWA: Technical Spec and MVP Plan (October 2026)
 
+> Implemented 2026-10-20. Where the build deviated from or refined this spec (local-first store, computed freezes, `recheck_by`, two-button submit), `CLAUDE.md` → "Build status" lists the choices.
+
 Research compiled 2026-10-20. Package versions in §(c) were confirmed with `npm view` on 2026-10-20. Bank sizes, the readiness formula and the leech threshold are engineering judgement, not AWS or FSRS guidance.
 
 **Decide which exam version you're taking before you write any questions.** AWS announced that the last day to take DVA-C02 is **November 30, 2026**. DVA-C03 becomes generally available on **December 1, 2026**, and registration opens October 27, 2026 (the full C03 guide is published the same day). The app design below works for either version. The question bank does not, so the course folder is versioned (`dva-c02/`, `dva-c03/`).
@@ -184,7 +186,8 @@ where not r.suspended
   and r.due < ((now() at time zone p.timezone - interval '4 hours')::date + 1 + interval '4 hours')
               at time zone p.timezone;
 
--- streak: consecutive local_dates with sessions_completed >= 1, answered >= 5, or freeze_used, ending today/yesterday
+-- streak: consecutive local_dates with sessions_completed >= 1 or answered >= 5; freezes are computed on read
+-- (every 7th qualifying day in a row earns one, max 2; a missed day spends one)
 -- (goal_met is the separate daily-goal ring and does not count toward the streak)
 create function streak_status() returns table(current int, longest int, today_done bool)
 language sql stable security invoker as $$ ... gaps-and-islands over daily_activity ... $$;
@@ -231,7 +234,7 @@ language sql stable security invoker as $$ ... gaps-and-islands over daily_activ
 | `review_states` | pk (`user_id`, `question_id`), `course_id`, `content_hash`, FSRS fields (`state, due, stability, difficulty, elapsed_days, scheduled_days, learning_steps, reps, lapses, last_review`), `is_leech`, `suspended`, `updated_at` | Index `(user_id, due)`; derived, rebuildable |
 | `attempts` | `id uuid pk` (client-generated), `course_id`, `question_id`, `content_hash`, `session_id`, `mode`, `selected text[]`, `correct`, `confidence`, `rating`, `time_ms`, `answered_at`, `local_date`, `domain_id`, `task_id`, `section_id` | Append-only; denormalised tags for analytics |
 | `sessions` | `id`, `local_date`, `kind`, `started_at`, `ended_at`, `planned_due`, `planned_new`, `answered`, `correct` | |
-| `daily_activity` | pk (`user_id`, `local_date`), `answered`, `correct`, `sessions_completed`, `minutes`, `goal_met`, `freeze_used` | Upserted by the client after each session |
+| `daily_activity` | pk (`user_id`, `local_date`), `answered`, `correct`, `sessions_completed`, `minutes`, `goal_met` | Upserted by the client after each session |
 | `section_progress` | pk (`user_id`, `course_id`, `section_id`), `best_pct`, `attempts`, `passed_at` | Drives unlock gating |
 | Views/RPCs | `due_today`, `streak_status()`, `topic_stats(course_id)` | Readiness weights applied client-side |
 
