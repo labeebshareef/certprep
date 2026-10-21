@@ -1,0 +1,12 @@
+// Cloudflare Workers with static assets: the Vite build in dist/ is served from the edge, no Worker script.
+// Deploy: connect the repo in the Cloudflare dashboard (Workers Builds, root directory dva-bank), or `npm run deploy`.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "certprep",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    // client-side routes (/study, /mock/run, …) fall back to index.html
+    "not_found_handling": "single-page-application"
+  }
+}

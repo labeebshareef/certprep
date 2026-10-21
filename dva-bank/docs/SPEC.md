@@ -266,7 +266,7 @@ language sql stable security invoker as $$ ... gaps-and-islands over daily_activ
 3. (1.5h) Content: load `course.json` + topic files through the Zod schema; the seed bank is already here.
 4. (2.5h) Study loop: session builder (due → new, caps) → question card (stem, shuffled choices, single/multi select, sure/unsure toggle *before* submit) → reveal (correct choices, per-choice explanations, references) → rate via ts-fsrs → persist attempt + state (online-only for now).
 5. (1h) Section quiz mode + 80% gate + `section_progress`.
-6. (0.5h) Deploy to Vercel/Netlify/Cloudflare Pages.
+6. (0.5h) Deploy to Cloudflare (Workers static assets; see README → Deploy).
 
 **Day 2: study first.** Do a real session in the morning. Then generate 2–3 more topics with Claude using `AUTHORING.md`. Afternoon (~3h): home screen with due count, streak, daily goal ring, domain-accuracy bars. Evening (~1h): vite-plugin-pwa.
 
