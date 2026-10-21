@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+defaults:
+  run:
+    working-directory: dva-bank
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dva-bank/package-lock.json
+      - run: npm ci
+      - name: Content pipeline leaves the tree clean
+        run: npm run content && git diff --exit-code -- content
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://uzmadqbamyryefhayyzy.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder
+      - name: End-to-end (Supabase stubbed)
+        run: npx playwright install --with-deps chromium && npx playwright test

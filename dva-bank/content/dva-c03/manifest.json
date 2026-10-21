@@ -1,6 +1,6 @@
 {
   "courseId": "dva-c03",
-  "generatedAt": "2026-10-20T13:10:04.499Z",
+  "generatedAt": "2026-10-20T13:22:32.485Z",
   "totalQuestions": 85,
   "perDomain": {
     "d1": 33,
@@ -13,7 +13,7 @@
       "hash": "sha256:6208ac54856e3ceb168c57684d34bf2230b0d0d74b1b7e03b3a1c0d3ae442c8e"
     },
     "glossary.json": {
-      "hash": "sha256:eb04edac0d8bb7c1b46ce9c8a6d419120c4b791e19bf282cad49759ebe0a5faa"
+      "hash": "sha256:ed860af089d5411f583f738ef60486b139ed695e438e647d2bbb8dbfb1d3b6fa"
     },
     "topics/d1-lambda.json": {
       "hash": "sha256:dc16eafdce715457b6336a14198344bd434bc8bd254e3da6e35e101207786352",

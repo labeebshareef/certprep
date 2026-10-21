@@ -64,6 +64,7 @@ for (const f of topicFiles) {
     stats.questions++;
     const [cid, topicSlug] = q.id.split("/");
     if (cid !== course.id) err(`${q.id}: id prefix must be ${course.id}`);
+    if (topicSlug !== topic.sectionId) err(`${q.id}: id section must be ${topic.sectionId}`);
     if (seenIds.has(q.id)) err(`${q.id}: duplicate id (also in ${seenIds.get(q.id)})`);
     seenIds.set(q.id, f);
     englishById.set(q.id, q);

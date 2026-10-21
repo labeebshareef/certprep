@@ -1,17 +1,62 @@
 {
-  "name": "dva-bank",
+  "name": "certprep",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "vite",
+    "build": "npm run validate && tsc --noEmit && vite build",
+    "serve": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "content": "npm run normalize && npm run hash && npm run validate && npm run glossary && npm run manifest",
     "validate": "tsx scripts/validate.ts content/dva-c03",
     "hash": "tsx scripts/hash.ts content/dva-c03",
     "normalize": "tsx scripts/normalize.ts content/dva-c03",
     "glossary": "tsx scripts/build-glossary.ts content/dva-c03",
-    "manifest": "tsx scripts/build-manifest.ts content/dva-c03",
-    "build": "npm run normalize && npm run hash && npm run validate && npm run glossary && npm run manifest",
-    "preview": "npx serve ."
+    "manifest": "tsx scripts/build-manifest.ts content/dva-c03"
   },
-  "dependencies": { "zod": "^4.0.0" },
-  "devDependencies": { "tsx": "^4.0.0" }
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/noto-sans-malayalam": "^5.3.0",
+    "@supabase/supabase-js": "^2.118.0",
+    "@tanstack/react-query": "^5.104.5",
+    "canvas-confetti": "^1.9.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "i18next": "^26.5.3",
+    "idb-keyval": "^6.3.0",
+    "lucide-react": "^1.60.0",
+    "motion": "^14.4.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-i18next": "^17.1.0",
+    "react-router": "^8.5.0",
+    "recharts": "^3.10.1",
+    "tailwind-merge": "^3.7.0",
+    "ts-fsrs": "5.4.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "fake-indexeddb": "^6.2.6",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.0.0",
+    "typescript": "5.9.3",
+    "vite": "^8.3.4",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
 }

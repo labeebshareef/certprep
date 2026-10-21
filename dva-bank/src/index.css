@@ -1,0 +1,152 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/noto-sans-malayalam";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --font-sans: "Inter Variable", "Noto Sans Malayalam Variable", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  /* Magic UI shimmer-button */
+  --animate-shimmer-slide: shimmer-slide var(--speed) ease-in-out infinite alternate;
+  --animate-spin-around: spin-around calc(var(--speed) * 2) infinite linear;
+  @keyframes shimmer-slide {
+    to {
+      transform: translate(calc(100cqw - 100%), 0);
+    }
+  }
+  @keyframes spin-around {
+    0% {
+      transform: translateZ(0) rotate(0);
+    }
+    15%,
+    35% {
+      transform: translateZ(0) rotate(90deg);
+    }
+    65%,
+    85% {
+      transform: translateZ(0) rotate(270deg);
+    }
+    100% {
+      transform: translateZ(0) rotate(360deg);
+    }
+  }
+}
+
+:root {
+  --background: #f7f8fb;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --muted: #eef1f6;
+  --muted-foreground: #5b6476;
+  --border: #dde2ea;
+  --ring: #6366f1;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --secondary: #eef1f6;
+  --accent: #f59e0b;
+  --success: #15803d;
+  --success-soft: #e7f6ec;
+  --danger: #b91c1c;
+  --danger-soft: #fdecec;
+  --warning: #a16207;
+  --warning-soft: #fdf5dc;
+  color-scheme: light;
+}
+
+.dark {
+  --background: #0b0f19;
+  --foreground: #e6e9f0;
+  --card: #121827;
+  --muted: #1a2133;
+  --muted-foreground: #96a0b5;
+  --border: #252d40;
+  --ring: #818cf8;
+  --primary: #818cf8;
+  --primary-foreground: #0b0f19;
+  --secondary: #1a2133;
+  --accent: #fbbf24;
+  --success: #4ade80;
+  --success-soft: #11291b;
+  --danger: #f87171;
+  --danger-soft: #2d1416;
+  --warning: #facc15;
+  --warning-soft: #2a2410;
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.55;
+}
+
+/* Malayalam needs more leading, slightly larger size, and never letter-spacing (breaks shaping). */
+:lang(ml) {
+  line-height: 1.75;
+  font-size: 1.05em;
+  letter-spacing: normal;
+}
+
+/* Protected terms inside content */
+.term {
+  font-weight: 550;
+}
+.term[data-gloss] {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+code.inline {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 0.05em 0.35em;
+  border-radius: 0.35em;
+  background: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.content-text {
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

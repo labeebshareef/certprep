@@ -1,8 +1,8 @@
--- First-cut schema for per-user study state. Content (questions) lives in JSON in the repo, NOT here.
--- Every user-scoped table: user_id defaults to auth.uid(), RLS on, single policy, btree index on user_id.
--- Review before applying; adjust names to taste. Tested only for syntax shape, not against a live project.
-
-create extension if not exists pgcrypto;
+-- Per-user study state. Content (questions) lives in JSON in the repo, NOT here.
+-- Every user-scoped table: user_id defaults to auth.uid(), RLS on, own-rows policy, index led by user_id.
+-- attempts is append-only: select + insert policies only (sync upserts use ON CONFLICT DO NOTHING).
+-- The app is local-first: it computes streaks/stats from its own IndexedDB copy and syncs rows here.
+-- The SQL helpers below mirror the client logic (src/lib/streak.ts) for server-side/SaaS use.
 
 -- ---------- profiles ----------
 create table if not exists public.profiles (
@@ -11,17 +11,17 @@ create table if not exists public.profiles (
   day_rollover_hour  smallint    not null default 4 check (day_rollover_hour between 0 and 23),
   locale             text        not null default 'en',
   new_per_day        smallint    not null default 10 check (new_per_day between 0 and 50),
-  daily_goal_min     smallint    not null default 20,
+  daily_goal_min     smallint    not null default 20 check (daily_goal_min between 5 and 120),
   desired_retention  real        not null default 0.9 check (desired_retention between 0.7 and 0.99),
   active_course      text        not null default 'dva-c03',
-  streak_freezes     smallint    not null default 0 check (streak_freezes between 0 and 2),
+  english_content    boolean     not null default false,   -- "practice in English": ignore the content overlay
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
 
 -- auto-create a profile on signup
 create or replace function public.handle_new_user()
-returns trigger language plpgsql security definer set search_path = public as $$
+returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   insert into public.profiles (user_id) values (new.id) on conflict do nothing;
   return new;
@@ -48,6 +48,7 @@ create table if not exists public.review_states (
   last_review     timestamptz,
   is_leech        boolean     not null default false,
   suspended       boolean     not null default false,
+  recheck_by      timestamptz,                         -- set after a confident-wrong answer: next due is capped here
   updated_at      timestamptz not null default now(),
   primary key (user_id, question_id)
 );
@@ -88,6 +89,7 @@ create table if not exists public.sessions (
   section_id   text,
   started_at   timestamptz not null default now(),
   ended_at     timestamptz,
+  completed    boolean     not null default false,   -- queue exhausted or time cap reached (counts for the streak)
   planned_due  integer     not null default 0,
   planned_new  integer     not null default 0,
   answered     integer     not null default 0,
@@ -101,9 +103,9 @@ create table if not exists public.daily_activity (
   local_date   date     not null,
   answered     integer  not null default 0,
   correct      integer  not null default 0,
+  sessions_completed integer not null default 0,   -- sessions with completed = true on this local day
   minutes      real     not null default 0,
-  goal_met     boolean  not null default false,
-  freeze_used  boolean  not null default false,
+  goal_met     boolean  not null default false,   -- 20-minute ring; separate from the streak
   primary key (user_id, local_date)
 );
 
@@ -126,15 +128,23 @@ begin
   foreach t in array array['profiles','review_states','attempts','sessions','daily_activity','section_progress'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "own rows" on public.%I', t);
+  end loop;
+  foreach t in array array['profiles','review_states','sessions','daily_activity','section_progress'] loop
     execute format(
       'create policy "own rows" on public.%I for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id)', t);
   end loop;
 end $$;
 
+-- attempts: append-only
+drop policy if exists "own rows read" on public.attempts;
+drop policy if exists "own rows insert" on public.attempts;
+create policy "own rows read" on public.attempts for select to authenticated using ((select auth.uid()) = user_id);
+create policy "own rows insert" on public.attempts for insert to authenticated with check ((select auth.uid()) = user_id);
+
 -- ---------- helpers ----------
 -- local study date with a 04:00 rollover in the user's time zone
 create or replace function public.local_study_date(ts timestamptz, tz text, rollover_hour int default 4)
-returns date language sql immutable as $$
+returns date language sql stable set search_path = '' as $$  -- stable, not immutable: tz rules can change
   select ((ts at time zone tz) - make_interval(hours => rollover_hour))::date
 $$;
 
@@ -149,38 +159,52 @@ where not r.suspended
     + make_interval(hours => p.day_rollover_hour)
   ) at time zone p.timezone;
 
--- streak: consecutive local dates (goal_met or freeze_used) ending today or yesterday
+-- streak, computed on read (no stored freeze state). A day qualifies with >=1 completed session or >=5 answers.
+-- Walking forward from the first active day: every 7th qualifying day in a row earns a freeze (max 2 held);
+-- a missed day spends a freeze and the streak survives (the bridged day adds 0), otherwise the streak resets.
+-- Today never breaks the streak; it only adds 1 once it qualifies. goal_met (daily goal ring) is separate.
 create or replace function public.streak_status()
-returns table (current_streak int, longest_streak int, today_done boolean)
-language plpgsql stable security invoker as $$
+returns table (current_streak int, longest_streak int, today_done boolean, freezes int)
+language plpgsql stable security invoker set search_path = '' as $$
 declare
-  today date;
-  cur int := 0; longest int := 0; run int := 0; prev date := null; d date; done boolean;
+  today date; first_day date; d date; q boolean;
+  run int := 0; longest int := 0; held int := 0; earned int := 0; done boolean := false;
 begin
   select public.local_study_date(now(), p.timezone, p.day_rollover_hour) into today
   from public.profiles p where p.user_id = (select auth.uid());
+  if today is null then return query select 0, 0, false, 0; return; end if;
 
-  for d in
-    select local_date from public.daily_activity
-    where user_id = (select auth.uid()) and (goal_met or freeze_used or answered >= 5)
-    order by local_date
-  loop
-    if prev is not null and d = prev + 1 then run := run + 1; else run := 1; end if;
+  select min(local_date) into first_day from public.daily_activity
+  where user_id = (select auth.uid()) and (sessions_completed >= 1 or answered >= 5);
+  if first_day is null then return query select 0, 0, false, 0; return; end if;
+
+  d := first_day;
+  while d < today loop
+    select coalesce(bool_or(sessions_completed >= 1 or answered >= 5), false) into q
+    from public.daily_activity where user_id = (select auth.uid()) and local_date = d;
+    if q then
+      run := run + 1; earned := earned + 1;
+      if earned % 7 = 0 and held < 2 then held := held + 1; end if;
+    elsif run > 0 and held > 0 then
+      held := held - 1;
+    else
+      run := 0; earned := 0;
+    end if;
     longest := greatest(longest, run);
-    prev := d;
+    d := d + 1;
   end loop;
 
-  if prev is not null and (prev = today or prev = today - 1) then cur := run; else cur := 0; end if;
-  select coalesce(bool_or(goal_met or answered >= 5), false) into done
+  select coalesce(bool_or(sessions_completed >= 1 or answered >= 5), false) into done
   from public.daily_activity where user_id = (select auth.uid()) and local_date = today;
+  if done then run := run + 1; longest := greatest(longest, run); end if;
 
-  return query select cur, longest, done;
+  return query select run, longest, done, held;
 end $$;
 
 -- per-topic stats from the most recent attempt per question (client applies domain weights)
 create or replace function public.topic_stats(p_course_id text)
 returns table (domain_id text, section_id text, attempted int, correct int, confident_wrong int, stale int)
-language sql stable security invoker as $$
+language sql stable security invoker set search_path = '' as $$
   with latest as (
     select distinct on (question_id) question_id, domain_id, section_id, correct, confidence, answered_at
     from public.attempts

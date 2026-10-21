@@ -1,45 +1,67 @@
-# DVA exam-prep: question bank + app spec
+# CertPrep: AWS Developer Associate exam prep
 
-Content-as-JSON for the exam-prep PWA. Courses live under `content/<courseId>/`; the app reads only JSON, the database stores only per-user state keyed by question id.
+A local-first PWA for spaced-repetition practice on the AWS Certified Developer – Associate exam. Questions are JSON in this repo; Supabase stores only per-user study state keyed by question id.
 
-Start here: `CLAUDE.md` (decisions, build order, conventions) → `docs/SPEC.md` (full research and spec) → `AUTHORING.md` (question format).
+Start here: `CLAUDE.md` (decisions, status, conventions) → `docs/SPEC.md` (research and spec) → `AUTHORING.md` (question format).
 
+## What it does
+- **Daily session.** Due reviews come first, lowest recall probability first and interleaved across topics, then up to 10 new questions from unlocked sections. You submit each answer as either *sure* or *not sure*, then see an explanation for every choice. Missed questions come back later in the same session. New questions stop at 25 minutes and the session ends at 30.
+- **Scheduling.** FSRS-6 via `ts-fsrs` 5.4.2 at 0.9 target retention. Wrong = Again, right but unsure = Hard, right and sure = Good. A confident wrong answer comes back within 3 days. A question becomes a leech after 4 lapses.
+- **Sections.** Each section has a 10-question quiz. Scoring 80% unlocks the next section.
+- **Mock exam.** 65 questions in 130 minutes, weighted by domain. It survives a reload and has a full answer review at the end.
+- **Dashboard.** Due and new counts, streak with freezes, a 20-minute daily goal ring, an exam-readiness estimate, per-domain mastery, calibration, a 7-day review forecast and a 12-week activity heatmap.
+- **Review.** A confident-wrong queue, recent misses and a leech list (reset a leech, or report the item as a GitHub issue).
+- **Offline and installable.** Every answer is saved to IndexedDB first and synced in the background. The whole question bank is precached by the service worker.
+- **English / Malayalam UI.** A per-question Malayalam content overlay falls back to English when it's stale. AWS terms are never translated.
+
+## Layout
 ```
-CLAUDE.md             project guide for Claude Code sessions
-docs/SPEC.md          technical spec: exam facts, FSRS, schema, Supabase, stack, MVP plan
-supabase/migrations/  0001_init.sql — first-cut per-user state schema with RLS
-.claude/skills/       magic-ui skill (free components only)
-content/dva-c03/
-  course.json         domains + weights, task statements, section order and unlock gating
-  glossary.json       protected terms (never translated)
-  manifest.json       generated: per-file hashes + counts (run scripts/build-manifest.ts)
-  topics/*.json       one file per section, ~10 questions each
-  i18n/ml/*.json      Malayalam overlay keyed by question id (later)
-schema/content.ts     Zod schema — single source of truth for the format
-scripts/
-  validate.ts         whole-course validation (schema, ids, hashes, overlay token parity)
-  validate-topic.ts   one file while authoring
-  hash.ts             stamps contentHash on every question (idempotent)
-  build-manifest.ts   writes manifest.json
-AUTHORING.md          rules + worked example used to generate questions
-preview.html          stopgap quiz runner (localStorage only) until the PWA exists
+src/                  the app (Vite root is this folder)
+  lib/                pure logic + unit tests (scheduler, session, stats, store, sync, content, time)
+  state/app.tsx       auth, per-user local store, background sync
+  routes/             Home, Study/Quiz/Practice, Sections, Review, Mock, Settings, Login
+  components/         QuestionCard, SessionRunner, Layout, ui/ (shadcn-style), magicui/ (vendored, MIT)
+  i18n/               en.ts (canonical), ml.ts (unreviewed)
+e2e/                  Playwright tests; Supabase is stubbed at the network layer
+content/dva-c03/      course.json, glossary.json, manifest.json, topics/*.json, i18n/ml/*.json (none yet)
+schema/content.ts     Zod schema, shared by the CLI validator and the app loader
+scripts/              validate · validate-topic · hash · normalize · build-glossary · build-manifest
+supabase/             migrations (applied to project uzmadqbamyryefhayyzy) + README
+docs/                 SPEC.md, REVIEW-LOG.md
 ```
 
-## Commands
+## Develop
 ```
 npm install
-npx tsx scripts/hash.ts content/dva-c03          # stamp hashes after any edit
-npx tsx scripts/validate.ts content/dva-c03      # must print "0 errors"
-npx tsx scripts/build-manifest.ts content/dva-c03
-npx serve .                                       # then open http://localhost:3000/preview.html
+cp .env.example .env          # set VITE_SUPABASE_ANON_KEY to the project's sb_publishable_... key
+npm run dev                   # http://localhost:5173
+npm test                      # unit tests
+npm run typecheck
+npm run build                 # validate content + tsc + vite build → dist/
+npx playwright test           # e2e (needs `npx playwright install chromium` once)
+npm run content               # after editing questions: normalize, hash, validate, glossary, manifest
 ```
 
-## Editing rules
-- `id` is immutable. Retire with `"retired": true`; never reuse.
-- Material edits (stem/choices/key/explanation meaning) → bump `revision`, set `changeKind: "material"`; the app resets that question's review state. Typos → `"cosmetic"`.
-- Re-run `hash.ts` after every edit; `validate.ts` fails on stale hashes.
+## Supabase auth settings (one-time, in the dashboard)
+1. **Authentication → URL Configuration.** Set *Site URL* to the deployed origin, and add both the deployed origin and `http://localhost:5173` to *Redirect URLs*. Without this, magic links point at the default `localhost:3000`.
+2. **Optional: sign in with a code.** In *Authentication → Emails → Magic Link*, add `{{ .Token }}` to the template so the email also contains a 6-digit code. The sign-in screen already accepts codes.
+3. The built-in email sender is rate-limited. Add custom SMTP before inviting anyone else.
+
+## Deploy (Vercel)
+In Vercel, choose **Add New → Project** and import `labeebshareef/certprep`, then:
+- **Root Directory:** `dva-bank`. The framework, build command and output directory come from `vercel.json`.
+- **Environment variables:**
+  - `VITE_SUPABASE_URL` = `https://uzmadqbamyryefhayyzy.supabase.co`
+  - `VITE_SUPABASE_ANON_KEY` = the `sb_publishable_…` key
+
+Any static host works the same way: run `npm run build` and serve `dist/` with an SPA fallback to `index.html`.
+
+## Editing questions
+- `id` is immutable. Retire a question with `"retired": true`; never reuse an id.
+- For a material edit (stem, choices, key or explanation meaning), bump `revision` and set `changeKind: "material"`. The app then resets that question's review state. Use `"cosmetic"` for typos.
+- Run `npm run content` after every edit. CI fails if it leaves a diff or the validator reports errors.
 - Anything that must stay English goes in `{{t:...}}` (names) or `{{code:...}}` (identifiers). Those are the only places `{{` may appear.
 
 ## Status
-- DVA-C03 exam guide is published 2026-10-27. `course.json` is marked `provisional`: weights are from the AWS announcement (30/26/22/22), task statements are carried over from C02 v2.1. After the guide drops: update tasks, retag `taskId`s, add sections for the new scope (Bedrock, AgentCore, Amazon Q, Kiro, Data Firehose, PrivateLink, AI security).
-- Seed bank: ~85 questions on the C02→C03 overlap core. Generated by Claude, `reviewed: false`. Treat leeches and confident-wrong clusters as "audit the item first".
+- **Exam guide.** The DVA-C03 exam guide is published on 2026-10-27. `course.json` is `provisional` until then: weights are 30/26/22/22 and task statements are carried over from C02 v2.1. After the guide drops, update the tasks, retag `taskId`s, and add sections for the new scope.
+- **Seed bank.** 85 questions, written by Claude and given an independent answer-key review (`docs/REVIEW-LOG.md`), but not yet reviewed by a human (`reviewed: false`). If an item turns into a leech or a confident-wrong cluster, audit the question first.
