@@ -47,14 +47,24 @@ npm run content               # after editing questions: normalize, hash, valida
 2. **Optional: sign in with a code.** In *Authentication → Emails → Magic Link*, add `{{ .Token }}` to the template so the email also contains a 6-digit code. The sign-in screen already accepts codes.
 3. The built-in email sender is rate-limited. Add custom SMTP before inviting anyone else.
 
-## Deploy (Vercel)
-In Vercel, choose **Add New → Project** and import `labeebshareef/certprep`, then:
-- **Root Directory:** `dva-bank`. The framework, build command and output directory come from `vercel.json`.
-- **Environment variables:**
+## Deploy (Cloudflare Workers, static assets)
+`wrangler.jsonc` serves `dist/` from Cloudflare's edge with an SPA fallback. `public/_headers` sets the cache headers: hashed assets are immutable and `sw.js` is `no-cache`, so updates are picked up.
+
+**Recommended: Git deploys (Workers Builds).** In the Cloudflare dashboard, go to *Workers & Pages → Create → Import a repository* and pick `labeebshareef/certprep`. Then:
+- **Root directory:** `dva-bank`
+- **Build command:** `npm run build`
+- **Deploy command:** `npx wrangler deploy` (the default)
+- **Build variables** (the Vite build bakes these in, so they must be build-time variables, not runtime secrets):
   - `VITE_SUPABASE_URL` = `https://uzmadqbamyryefhayyzy.supabase.co`
   - `VITE_SUPABASE_ANON_KEY` = the `sb_publishable_…` key
 
-Any static host works the same way: run `npm run build` and serve `dist/` with an SPA fallback to `index.html`.
+Every push to `main` deploys to `https://certprep.<your-subdomain>.workers.dev`. Other branches get preview URLs. You can attach a custom domain under the Worker's *Settings → Domains & Routes*.
+
+**Manual alternative:** run `npx wrangler login`, then `npm run deploy` (with `.env` filled in).
+
+**Local check of the production setup:** `npm run build && npm run serve:cf` serves the build through Wrangler at http://localhost:8787.
+
+After the first deploy, add the `workers.dev` URL (and any custom domain) to Supabase's Site URL and Redirect URLs, as described above.
 
 ## Editing questions
 - `id` is immutable. Retire a question with `"retired": true`; never reuse an id.
